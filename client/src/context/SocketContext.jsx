@@ -10,12 +10,13 @@ export const useSocket = () => {
 };
 
 export function SocketProvider({ children }) {
-  const [socket, setSocket]       = useState(null);
+  const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';  // Vérifie bien l'URL de production
 
   useEffect(() => {
+    console.log(`Tentative de connexion à WebSocket : ${API_URL}`);
     const s = io(API_URL, {
       transports: ['websocket', 'polling'],
       withCredentials: true,
@@ -24,17 +25,26 @@ export function SocketProvider({ children }) {
       reconnectionDelay: 1000,
     });
 
-    s.on('connect',       () => { setConnected(true);  console.log('✅ Socket connected'); });
-    s.on('disconnect',    () => { setConnected(false); console.log('❌ Socket disconnected'); });
+    s.on('connect', () => {
+      setConnected(true);
+      console.log('✅ Socket connected');
+    });
+
+    s.on('disconnect', () => {
+      setConnected(false);
+      console.log('❌ Socket disconnected');
+    });
+
     s.on('connect_error', (e) => console.warn('⚠️ Socket error:', e.message));
 
     setSocket(s);
+
     return () => s.disconnect();
   }, [API_URL]);
 
   return (
-    <SocketContext.Provider value={{ socket, connected }}>
-      {children}
-    </SocketContext.Provider>
+      <SocketContext.Provider value={{ socket, connected }}>
+        {children}
+      </SocketContext.Provider>
   );
 }
