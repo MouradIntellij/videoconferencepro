@@ -3,25 +3,50 @@ import { useUI } from '../../context/UIContext.jsx';
 export default function ReactionsOverlay() {
   const { reactions } = useUI();
 
-  if (!reactions.length) return null;
+  console.log('[ReactionsOverlay] rendering, reactions count:', reactions.length);
+
+  // Always render the container so it's in the DOM
+  return (
+    <div
+      className="pointer-events-none fixed inset-0 z-50 overflow-hidden"
+      aria-hidden="true"
+    >
+      {reactions.map(r => (
+        <ReactionBubble key={r.id} reaction={r} />
+      ))}
+    </div>
+  );
+}
+
+function ReactionBubble({ reaction }) {
+  // Random horizontal position so multiple reactions don't stack
+  const left = 30 + Math.random() * 40; // 30%–70% of viewport width
 
   return (
-    <div className="pointer-events-none fixed bottom-24 left-1/2 -translate-x-1/2 flex flex-col-reverse items-center gap-2 z-40">
-      {reactions.map(r => (
-        <div
-          key={r.id}
-          className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5 animate-bounce-in"
-          style={{ animation: 'floatUp 3s ease-out forwards' }}
-        >
-          <span className="text-2xl">{r.emoji}</span>
-          <span className="text-white text-xs font-medium">{r.userName}</span>
-        </div>
-      ))}
+    <div
+      className="absolute bottom-28 flex flex-col items-center gap-1"
+      style={{
+        left: `${left}%`,
+        transform: 'translateX(-50%)',
+        animation: 'reactionFloat 3.5s ease-out forwards',
+      }}
+    >
+      <span className="text-5xl drop-shadow-lg" style={{ lineHeight: 1 }}>
+        {reaction.emoji}
+      </span>
+      <span
+        className="text-white text-xs font-semibold px-2 py-0.5 rounded-full"
+        style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+      >
+        {reaction.userName}
+      </span>
+
       <style>{`
-        @keyframes floatUp {
-          0%   { opacity: 1; transform: translateY(0)   scale(1); }
-          80%  { opacity: 1; transform: translateY(-60px) scale(1.1); }
-          100% { opacity: 0; transform: translateY(-80px) scale(0.9); }
+        @keyframes reactionFloat {
+          0%   { opacity: 0;   transform: translateX(-50%) translateY(0)    scale(0.5); }
+          15%  { opacity: 1;   transform: translateX(-50%) translateY(-10px) scale(1.2); }
+          80%  { opacity: 1;   transform: translateX(-50%) translateY(-120px) scale(1); }
+          100% { opacity: 0;   transform: translateX(-50%) translateY(-160px) scale(0.8); }
         }
       `}</style>
     </div>

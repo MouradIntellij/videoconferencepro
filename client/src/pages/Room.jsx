@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSocket }     from '../context/SocketContext.jsx';
 import { useRoom }       from '../context/RoomContext.jsx';
 import { useUI }         from '../context/UIContext.jsx';
@@ -55,13 +55,14 @@ export default function Room({ roomId, userName, onLeave }) {
   const { participants }            = useRoom();
   const { screenStream, leaveRoom } = useMedia();
 
-  // Get toggleHand from useWebRTC (fixed hook)
-  const { joinRoom, toggleHand }    = useWebRTC(roomId, userName);
+  // ✅ Destructure BOTH joinRoom AND toggleHand from useWebRTC
+  const { joinRoom, toggleHand } = useWebRTC(roomId, userName);
 
   const [joined,     setJoined]     = useState(false);
   const [kicked,     setKicked]     = useState(false);
   const [showInvite, setShowInvite] = useState(true);
-  // Track hand state in UI for button visual feedback
+
+  // Local UI state for hand button visual (toggles independently of server roundtrip)
   const [handRaised, setHandRaised] = useState(false);
 
   useEffect(() => {
@@ -75,11 +76,12 @@ export default function Room({ roomId, userName, onLeave }) {
     return () => socket.off(EVENTS.KICKED);
   }, [socket]);
 
-  // Wrap toggleHand to also update local UI state
+  // ✅ handleToggleHand: calls socket emit via toggleHand + flips local UI state
   const handleToggleHand = useCallback(() => {
-    toggleHand();
-    setHandRaised(prev => !prev);
-  }, [toggleHand]);
+    console.log('[Room] handleToggleHand called, current:', handRaised);
+    toggleHand();                        // emits RAISE_HAND or LOWER_HAND
+    setHandRaised(prev => !prev);        // update button visual immediately
+  }, [toggleHand, handRaised]);
 
   const handleLeave = useCallback(() => {
     leaveRoom();
@@ -141,6 +143,7 @@ export default function Room({ roomId, userName, onLeave }) {
 
         <div className="flex items-center gap-2">
           <HostControls roomId={roomId} />
+          {/* ReactionBar: pass roomId + userName so it can emit correctly */}
           <ReactionBar roomId={roomId} userName={userName} />
           <button
             onClick={() => setShowInvite(v => !v)}
@@ -160,17 +163,18 @@ export default function Room({ roomId, userName, onLeave }) {
       {/* ── Invite banner ── */}
       {showInvite && <InviteBanner roomId={roomId} />}
 
-      {/* ── Main ── */}
+      {/* ── Main area ── */}
       <div className="flex flex-1 overflow-hidden min-h-0">
         <div className="relative flex-1 overflow-hidden bg-gray-950">
           <VideoGrid />
+          {/* ReactionsOverlay must be INSIDE the relative container so z-50 works */}
           <ReactionsOverlay />
         </div>
         <ParticipantsPanel roomId={roomId} />
         <ChatSidebar roomId={roomId} userName={userName} userId={socket?.id} />
       </div>
 
-      {/* ── Control bar — pass toggleHand + handRaised ── */}
+      {/* ── Control bar — receives toggleHand + handRaised ── */}
       <div className="shrink-0">
         <ControlBar
           roomId={roomId}

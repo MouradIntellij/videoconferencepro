@@ -1,5 +1,4 @@
 import { useMedia }       from '../../context/MediaContext.jsx';
-import { useSocket }      from '../../context/SocketContext.jsx';
 import { useRoom }        from '../../context/RoomContext.jsx';
 import { useUI }          from '../../context/UIContext.jsx';
 import { useScreenShare } from '../../hooks/useScreenShare.js';
@@ -101,7 +100,7 @@ const IconBoard = () => (
   </svg>
 );
 
-// ── ZoomBtn ───────────────────────────────────────────────────
+// ── Button components ─────────────────────────────────────────
 function ZoomBtn({ onClick, active, danger, highlight, title, icon, label, pulse }) {
   return (
     <button
@@ -115,13 +114,12 @@ function ZoomBtn({ onClick, active, danger, highlight, title, icon, label, pulse
         ${danger
           ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/50'
           : highlight
-          ? 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/40'
+          ? 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-lg'
           : active
           ? 'bg-gray-600 text-white ring-2 ring-white/30'
           : 'bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700/60'
         }
-        ${pulse && highlight ? 'ring-2 ring-green-400 ring-offset-1 ring-offset-gray-900' : ''}
-        ${pulse && !highlight && !danger ? 'ring-2 ring-red-400 ring-offset-1 ring-offset-gray-900' : ''}
+        ${pulse ? 'ring-2 ring-offset-1 ring-offset-gray-900 ring-yellow-400' : ''}
       `}
     >
       <span className="transition-transform duration-150 group-hover:scale-110 group-active:scale-95">
@@ -154,7 +152,8 @@ function PanelBtn({ onClick, active, title, icon, label }) {
   );
 }
 
-// ── ControlBar — receives toggleHand from Room ────────────────
+// ── ControlBar ────────────────────────────────────────────────
+// Props: toggleHand (function), handRaised (boolean) come from Room.jsx
 export default function ControlBar({ roomId, onLeave, toggleHand, handRaised }) {
   const { audioEnabled, videoEnabled, toggleAudio, toggleVideo } = useMedia();
   const { locked } = useRoom();
@@ -185,7 +184,7 @@ export default function ControlBar({ roomId, onLeave, toggleHand, handRaised }) 
         )}
         {isSharing && (
           <button onClick={toggleScreen}
-            className="flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl transition-colors">
+            className="flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl">
             <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
               <rect x="6" y="6" width="12" height="12" rx="1"/>
             </svg>
@@ -224,20 +223,19 @@ export default function ControlBar({ roomId, onLeave, toggleHand, handRaised }) 
 
         <ZoomBtn
           onClick={toggleRecording}
-          highlight={isRecording}
-          pulse={isRecording}
+          active={isRecording}
           icon={isRecording ? <IconStop /> : <IconRecord />}
           label={isRecording ? 'Stop Rec' : 'Enregistrer'}
           title={isRecording ? "Arrêter l'enregistrement" : "Démarrer l'enregistrement"}
         />
 
-        {/* Hand toggle: raised = yellow highlight, click again to lower */}
+        {/* ✅ Hand button: highlight=yellow when raised, label changes */}
         <ZoomBtn
           onClick={toggleHand}
-          active={handRaised}
           highlight={handRaised}
+          pulse={handRaised}
           icon={<IconHand raised={handRaised} />}
-          label={handRaised ? 'Baisser' : 'Main'}
+          label={handRaised ? 'Baisser ✋' : 'Main'}
           title={handRaised ? 'Baisser la main' : 'Lever la main'}
         />
 
@@ -266,21 +264,18 @@ export default function ControlBar({ roomId, onLeave, toggleHand, handRaised }) 
           active={participantsOpen}
           icon={<IconPeople />}
           label="Participants"
-          title="Participants"
         />
         <PanelBtn
           onClick={() => setChatOpen(o => !o)}
           active={chatOpen}
           icon={<IconChat />}
           label="Chat"
-          title="Chat"
         />
         <PanelBtn
           onClick={() => setWhiteboardOpen(o => !o)}
           active={whiteboardOpen}
           icon={<IconBoard />}
           label="Tableau"
-          title="Tableau blanc"
         />
       </div>
     </div>

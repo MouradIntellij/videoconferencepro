@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useSocket } from '../context/SocketContext.jsx';
 import { useRoom } from '../context/RoomContext.jsx';
 import { useMedia } from '../context/MediaContext.jsx';
@@ -15,45 +15,69 @@ export function useWebRTC(roomId, userName) {
   const { setActiveSpeakerId } = useUI();
   const { getMedia } = useMedia();
 
-  // ── Join room ─────────────────────────────────────────────
+  // Local ref so toggleHand works without stale closure
+  const handRaisedRef = useRef(false);
+
+  // ── Join ─────────────────────────────────────────────────
   const joinRoom = useCallback(async () => {
     const stream = await getMedia();
-
-    // Envoyer l'événement JOIN_ROOM
-    console.log(`Requête pour rejoindre la room ${roomId} avec le nom ${userName}`);
+    console.log(`[useWebRTC] Joining ${roomId} as ${userName}`);
     socket.emit(EVENTS.JOIN_ROOM, { roomId, userId: socket.id, userName });
-
     return stream;
   }, [socket, roomId, userName, getMedia]);
+
+  // ── toggleHand: alternates RAISE / LOWER each call ───────
+  const toggleHand = useCallback(() => {
+    if (!socket) {
+      console.warn('[useWebRTC] toggleHand: no socket!');
+      return;
+    }
+    const willRaise = !handRaisedRef.current;
+    handRaisedRef.current = willRaise;
+
+    if (willRaise) {
+      console.log('[useWebRTC] Emitting RAISE_HAND', roomId);
+      socket.emit(EVENTS.RAISE_HAND, { roomId });
+    } else {
+      console.log('[useWebRTC] Emitting LOWER_HAND', roomId);
+      socket.emit(EVENTS.LOWER_HAND, { roomId });
+    }
+  }, [socket, roomId]);
 
   // ── Socket listeners ──────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
 
-    // Écouter l'événement ROOM_PARTICIPANTS (on reçoit la liste des participants, hostId, locked)
     socket.on(EVENTS.ROOM_PARTICIPANTS, ({ participants, hostId, locked }) => {
-      console.log("Participants reçus dans la room:", participants);
       const others = participants.filter(p => p.socketId !== socket.id);
       setParticipants(others);
       setHostId(hostId);
       setLocked(locked);
     });
 
-    // Gestion des nouveaux participants qui rejoignent
     socket.on(EVENTS.USER_JOINED, (user) => {
-      if (user.socketId === socket.id) return; // ignorer si c'est nous
-      console.log(`${user.userName} a rejoint la room`);
-      addParticipant({ ...user, socketId: user.socketId });
+      if (user.socketId === socket.id) return;
+      const displayName = user.name || user.userName || 'Inconnu';
+      console.log(`[useWebRTC] USER_JOINED: ${displayName}`);
+      addParticipant({
+        ...user,
+        name:     displayName,
+        userName: displayName,
+        socketId: user.socketId,
+        audioEnabled: true,
+        videoEnabled: true,
+        handRaised:   false,
+      });
       if (user.hostId) setHostId(user.hostId);
     });
 
-    socket.on(EVENTS.HOST_CHANGED, ({ newHostId }) => setHostId(newHostId));
-    socket.on(EVENTS.ROOM_LOCKED, ({ locked }) => setLocked(locked));
+    socket.on(EVENTS.HOST_CHANGED,  ({ newHostId }) => setHostId(newHostId));
+    socket.on(EVENTS.ROOM_LOCKED,   ({ locked }) => setLocked(locked));
 
     socket.on(EVENTS.VIDEO_TOGGLED, ({ userId, enabled }) =>
-        updateParticipant(userId, { videoEnabled: enabled }));
+      updateParticipant(userId, { videoEnabled: enabled }));
     socket.on(EVENTS.AUDIO_TOGGLED, ({ userId, enabled }) =>
-        updateParticipant(userId, { audioEnabled: enabled }));
+      updateParticipant(userId, { audioEnabled: enabled }));
 
     // Active speaker
     const speakerMap = new Map();
@@ -64,12 +88,18 @@ export function useWebRTC(roomId, userName) {
       setActiveSpeakerId(maxId);
     });
 
-    socket.on(EVENTS.HAND_RAISED, ({ userId }) => updateParticipant(userId, { handRaised: true }));
-    socket.on(EVENTS.HAND_LOWERED, ({ userId }) => updateParticipant(userId, { handRaised: false }));
+    socket.on(EVENTS.HAND_RAISED,  ({ userId }) => {
+      console.log('[useWebRTC] HAND_RAISED received for', userId);
+      updateParticipant(userId, { handRaised: true });
+    });
+    socket.on(EVENTS.HAND_LOWERED, ({ userId }) => {
+      console.log('[useWebRTC] HAND_LOWERED received for', userId);
+      updateParticipant(userId, { handRaised: false });
+    });
 
-    socket.on(EVENTS.BREAKOUT_UPDATED, ({ breakoutRooms }) => setBreakoutRooms(breakoutRooms));
+    socket.on(EVENTS.BREAKOUT_UPDATED,  ({ breakoutRooms }) => setBreakoutRooms(breakoutRooms));
     socket.on(EVENTS.BREAKOUT_ASSIGNED, ({ breakoutId, breakoutName }) =>
-        setCurrentBreakout({ id: breakoutId, name: breakoutName }));
+      setCurrentBreakout({ id: breakoutId, name: breakoutName }));
     socket.on(EVENTS.BREAKOUT_END_ALL, () => setCurrentBreakout(null));
 
     return () => {
@@ -89,5 +119,5 @@ export function useWebRTC(roomId, userName) {
   }, [socket, setHostId, setLocked, setParticipants, addParticipant,
     updateParticipant, setBreakoutRooms, setCurrentBreakout, setActiveSpeakerId]);
 
-  return { joinRoom };
+  return { joinRoom, toggleHand };
 }
