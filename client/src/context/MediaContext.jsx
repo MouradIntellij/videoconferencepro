@@ -28,24 +28,22 @@ export function MediaProvider({ children, initialStream = null }) {
   const recorderRef     = useRef(null);
   const chunksRef       = useRef([]);
   const cleanupAudio    = useRef(null);
-  // Garde une ref stable du stream pour les closures WebRTC
   const localStreamRef  = useRef(initialStream);
 
-  // Sync ref quand le state change
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
 
-  // Démarrer l'analyse audio sur le stream du Lobby
+  // Audio analyser on initial stream
   useEffect(() => {
     if (!initialStream || !socket || !roomId) return;
     if (cleanupAudio.current) cleanupAudio.current();
     cleanupAudio.current = createAudioAnalyser(initialStream, (level) => {
       socket.emit(EVENTS.AUDIO_LEVEL, { roomId, level });
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // une seule fois au montage
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // ── Helpers streams ───────────────────────────────────────
   const addRemoteStream = useCallback((socketId, stream) => {
+    console.log(`[WebRTC] Remote stream received from ${socketId}`);
     setRemoteStreams(prev => new Map(prev).set(socketId, stream));
   }, []);
 
@@ -53,44 +51,31 @@ export function MediaProvider({ children, initialStream = null }) {
     setRemoteStreams(prev => { const n = new Map(prev); n.delete(socketId); return n; });
   }, []);
 
-  // ── PeerConnection factory ────────────────────────────────
   const buildPC = useCallback((targetId) => {
     if (peerConnections.current.has(targetId)) {
       peerConnections.current.get(targetId).close();
     }
-    // Utilise la ref pour avoir le stream le plus récent
     const stream = localStreamRef.current;
     const pc = createPeerConnection({ targetId, socket, roomId, stream, onTrack: addRemoteStream });
     peerConnections.current.set(targetId, pc);
     return pc;
   }, [socket, roomId, addRemoteStream]);
 
-  // ── getMedia ──────────────────────────────────────────────
   const getMedia = useCallback(async () => {
-    // Réutilise le stream existant (Lobby) — ne jamais ouvrir 2 fois
     if (localStreamRef.current) return localStreamRef.current;
-
     const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl:  true,
-          sampleRate:       48000,
-        }
-      });
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 48000 }
+    });
     localStreamRef.current = stream;
     setLocalStream(stream);
-
     if (cleanupAudio.current) cleanupAudio.current();
     cleanupAudio.current = createAudioAnalyser(stream, (level) => {
       if (socket && roomId) socket.emit(EVENTS.AUDIO_LEVEL, { roomId, level });
     });
-
     return stream;
   }, [socket, roomId]);
 
-  // ── Toggles ───────────────────────────────────────────────
   const toggleAudio = useCallback(() => {
     const stream = localStreamRef.current;
     if (!stream) return;
@@ -111,7 +96,6 @@ export function MediaProvider({ children, initialStream = null }) {
     socket?.emit(EVENTS.TOGGLE_VIDEO, { roomId, userId: socket.id, enabled: track.enabled });
   }, [socket, roomId]);
 
-  // ── Screen share ──────────────────────────────────────────
   const startScreenShare = useCallback(async () => {
     try {
       const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
@@ -124,9 +108,9 @@ export function MediaProvider({ children, initialStream = null }) {
       });
       videoTrack.onended = () => stopScreenShare();
     } catch (e) {
-      console.warn('Screen share cancelled or failed:', e.message);
+      console.warn('Screen share cancelled:', e.message);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, roomId]);
 
   const stopScreenShare = useCallback(() => {
@@ -141,7 +125,6 @@ export function MediaProvider({ children, initialStream = null }) {
     });
   }, [screenStream, socket, roomId]);
 
-  // ── Recording ─────────────────────────────────────────────
   const startRecording = useCallback(() => {
     const stream = localStreamRef.current;
     if (!stream) return;
@@ -154,7 +137,6 @@ export function MediaProvider({ children, initialStream = null }) {
       setIsRecording(true);
       socket?.emit(EVENTS.RECORDING_START, { roomId });
     } catch {
-      // Fallback codec
       const recorder = new MediaRecorder(stream);
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       recorder.start(1000);
@@ -178,7 +160,6 @@ export function MediaProvider({ children, initialStream = null }) {
     socket?.emit(EVENTS.RECORDING_STOP, { roomId });
   }, [socket, roomId]);
 
-  // ── Leave ─────────────────────────────────────────────────
   const leaveRoom = useCallback(() => {
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStream?.getTracks().forEach(t => t.stop());
@@ -191,20 +172,22 @@ export function MediaProvider({ children, initialStream = null }) {
     setRemoteStreams(new Map());
   }, [screenStream]);
 
-  // ── WebRTC socket events ──────────────────────────────────
+  // ── WebRTC events ─────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
 
-    // Quelqu'un rejoint → on lui envoie une offre
     const onUserJoined = async ({ socketId }) => {
+      // ✅ CRITICAL FIX: never create a PC to ourselves
+      if (socketId === socket.id) return;
+      console.log(`[WebRTC] Sending OFFER to ${socketId}`);
       const pc    = buildPC(socketId);
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socket.emit(EVENTS.OFFER, { offer: pc.localDescription, targetUserId: socketId, roomId });
     };
 
-    // On reçoit une offre → on répond
     const onOffer = async ({ offer, fromUserId }) => {
+      console.log(`[WebRTC] OFFER received from ${fromUserId}`);
       const pc = buildPC(fromUserId);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
@@ -214,7 +197,10 @@ export function MediaProvider({ children, initialStream = null }) {
 
     const onAnswer = async ({ answer, fromUserId }) => {
       const pc = peerConnections.current.get(fromUserId);
-      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      if (pc) {
+        try { await pc.setRemoteDescription(new RTCSessionDescription(answer)); }
+        catch (err) { console.error('[WebRTC] setRemoteDescription error:', err); }
+      }
     };
 
     const onIce = async ({ candidate, fromUserId }) => {

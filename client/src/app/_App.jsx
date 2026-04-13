@@ -13,7 +13,7 @@ function getRouteRoomId() {
   return match ? match[1] : null;
 }
 
-export default function App() {
+export default function _App() {
   const urlRoomId = getRouteRoomId();
 
   const [screen,   setScreen]   = useState(urlRoomId ? 'home-join' : 'home');

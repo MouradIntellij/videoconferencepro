@@ -44,7 +44,7 @@ videoconf-step7/
     └── src/
         ├── main.jsx
         ├── app/
-        │   └── App.jsx                   # router: home → lobby → room
+        │   └── _App.jsx                   # router: home → lobby → room
         ├── pages/
         │   ├── Home.jsx                  # create / join form
         │   ├── Lobby.jsx                 # camera preview pré-join
