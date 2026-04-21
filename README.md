@@ -84,11 +84,10 @@ videoconf-step7/
 
 ---
 
-## ⚠️ CORRECTIONS IMPORTANTES avant déploiement
+## ⚠️  IMPORTANTS avant déploiement
 
-### 1. Corriger server/src/config/cors.js
+### 1. server/src/config/cors.js
 
-Le fichier actuel a une URL avec `\n` parasite dans votre ancien code.
 Vérifiez que `cors.js` contient votre vraie URL Vercel **sans** `\n` :
 
 ```js
@@ -112,7 +111,7 @@ CLIENT_URL=https://videoconference-server-delta.vercel.app
 ```
 VITE_API_URL=https://videoconference-owz3.onrender.com
 ```
-> ⚠️ Après avoir ajouté la variable, faire **Redeploy** dans Vercel.
+ 
 
 ### 3. Vercel — vercel.json (à créer dans /client)
 
