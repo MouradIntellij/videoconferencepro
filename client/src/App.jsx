@@ -1,14 +1,13 @@
 import { useState, useRef } from 'react';
+import { SocketProvider } from './context/SocketContext.jsx';
 import { RoomProvider }   from './context/RoomContext.jsx';
 import { UIProvider }     from './context/UIContext.jsx';
 import { MediaProvider }  from './context/MediaContext.jsx';
-
 import Home        from './pages/Home.jsx';
 import Lobby       from './pages/Lobby.jsx';
 import WaitingRoom from './pages/WaitingRoom.jsx';
 import Room        from './pages/Room.jsx';
 
-// ── Lire roomId depuis URL (/room/:id) ─────────────────────
 function getRouteRoomId() {
   const match = window.location.pathname.match(/\/room\/([^/?#]+)/);
   return match ? match[1] : null;
@@ -17,15 +16,12 @@ function getRouteRoomId() {
 export default function App() {
   const urlRoomId = getRouteRoomId();
 
-  // ── Router state ─────────────────────────────────────────
   const [screen,   setScreen]   = useState(urlRoomId ? 'home-join' : 'home');
   const [roomId,   setRoomId]   = useState(urlRoomId || '');
   const [userName, setUserName] = useState('');
   const [isHost,   setIsHost]   = useState(false);
-
   const existingStream = useRef(null);
 
-  // ── Home → Lobby ─────────────────────────────────────────
   const handleJoin = (rid, uname) => {
     setRoomId(rid);
     setUserName(uname);
@@ -33,38 +29,30 @@ export default function App() {
     window.history.replaceState(null, '', `/room/${rid}`);
   };
 
-  // ── Lobby → WaitingRoom ──────────────────────────────────
+  // Lobby appelle ceci quand l'user clique Rejoindre/Démarrer
   const handleEnterWaiting = async (stream) => {
     existingStream.current = stream || null;
-
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
       const res  = await fetch(`${API_URL}/api/rooms/${roomId}`);
       const data = await res.json();
-
-      const willBeHost =
-          !data.exists || (data.participantCount ?? 0) === 0;
-
+      // Salle vide ou inexistante = premier arrivant = hôte
+      const willBeHost = !data.exists || (data.participantCount ?? 0) === 0;
       setIsHost(willBeHost);
+      // ✅ FIX : hôte → room directement, invité → salle d'attente
+      setScreen(willBeHost ? 'room' : 'waiting');
     } catch {
-      setIsHost(false);
+      // Erreur réseau : entrer quand même en tant qu'hôte
+      setIsHost(true);
+      setScreen('room');
     }
-
-    setScreen('waiting');
   };
 
-  // ── WaitingRoom → Room ───────────────────────────────────
   const handleEnterRoom = (stream) => {
     existingStream.current = stream || null;
     setScreen('room');
   };
 
-  // ── Retour waiting → lobby ───────────────────────────────
-  const handleWaitingBack = () => {
-    setScreen('lobby');
-  };
-
-  // ── Quitter room → home ──────────────────────────────────
   const handleLeave = () => {
     existingStream.current = null;
     setRoomId('');
@@ -74,9 +62,7 @@ export default function App() {
     window.history.replaceState(null, '', '/');
   };
 
-  // ───────────────── ROUTING ───────────────────────────────
-
-  // Home
+  // ── Accueil ───────────────────────────────────────────────
   if (screen === 'home' || screen === 'home-join') {
     return (
         <Home
@@ -86,46 +72,52 @@ export default function App() {
     );
   }
 
-  // Lobby (⚠️ maintenant OK. Car SocketProvider est global)
+  // ── Lobby : SocketProvider requis car Lobby utilise useSocket ─
   if (screen === 'lobby') {
     return (
-        <Lobby
-            roomId={roomId}
-            userName={userName}
-            onJoin={handleEnterWaiting}
-            onBack={() => {
-              setScreen('home');
-              window.history.replaceState(null, '', '/');
-            }}
-        />
+        <SocketProvider>
+          <Lobby
+              roomId={roomId}
+              userName={userName}
+              onJoin={handleEnterWaiting}
+              onBack={() => {
+                setScreen('home');
+                window.history.replaceState(null, '', '/');
+              }}
+          />
+        </SocketProvider>
     );
   }
 
-  // Waiting Room (style Zoom)
+  // ── Salle d'attente (invités uniquement) ──────────────────
   if (screen === 'waiting') {
     return (
-        <WaitingRoom
-            roomId={roomId}
-            userName={userName}
-            isHost={isHost}
-            onJoin={handleEnterRoom}
-            onBack={handleWaitingBack}
-        />
+        <SocketProvider>
+          <WaitingRoom
+              roomId={roomId}
+              userName={userName}
+              isHost={false}
+              onJoin={handleEnterRoom}
+              onBack={() => setScreen('lobby')}
+          />
+        </SocketProvider>
     );
   }
 
-  // Room principale
+  // ── Salle principale ──────────────────────────────────────
   return (
-      <RoomProvider>
-        <UIProvider>
-          <MediaProvider initialStream={existingStream.current}>
-            <Room
-                roomId={roomId}
-                userName={userName}
-                onLeave={handleLeave}
-            />
-          </MediaProvider>
-        </UIProvider>
-      </RoomProvider>
+      <SocketProvider>
+        <RoomProvider>
+          <UIProvider>
+            <MediaProvider initialStream={existingStream.current}>
+              <Room
+                  roomId={roomId}
+                  userName={userName}
+                  onLeave={handleLeave}
+              />
+            </MediaProvider>
+          </UIProvider>
+        </RoomProvider>
+      </SocketProvider>
   );
 }

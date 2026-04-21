@@ -1,97 +1,304 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSocket }  from '../../context/SocketContext.jsx';
 import { useUI }      from '../../context/UIContext.jsx';
 import { EVENTS }     from '../../utils/events.js';
 
-const EMOJIS = [
-  { emoji: '👍', label: 'Super' },
-  { emoji: '👏', label: 'Bravo' },
-  { emoji: '😂', label: 'Haha' },
-  { emoji: '❤️', label: 'Love' },
-  { emoji: '🔥', label: 'Fire' },
-  { emoji: '🎉', label: 'Fête' },
-  { emoji: '😮', label: 'Wow' },
-  { emoji: '🙏', label: 'Merci' },
+// ─── Réactions "Send with effect" (grandes animations) ───────
+const EFFECT_REACTIONS = [
+  { emoji: '🎈', label: 'Ballons' },
+  { emoji: '🚀', label: 'Fusée'   },
+  { emoji: '👍', label: 'Super'   },
+  { emoji: '😂', label: 'Haha'    },
+  { emoji: '🎉', label: 'Confetti'},
+  { emoji: '❤️', label: 'Love'    },
 ];
 
-export default function ReactionBar({ roomId, userName }) {
+// ─── Réactions rapides (style Teams/Zoom) ────────────────────
+const QUICK_REACTIONS = [
+  { emoji: '👋', label: 'Salut'   },
+  { emoji: '👍', label: 'Super'   },
+  { emoji: '❤️', label: 'Love'    },
+  { emoji: '😂', label: 'Haha'    },
+  { emoji: '😮', label: 'Wow'     },
+  { emoji: '🎉', label: 'Fête'    },
+];
+
+// ─── Boutons statut ───────────────────────────────────────────
+const STATUS_BUTTONS = [
+  { emoji: '✅', label: 'Oui',       key: 'yes'  },
+  { emoji: '❌', label: 'Non',       key: 'no'   },
+  { emoji: '⏪', label: 'Plus lent', key: 'slow' },
+  { emoji: '⏩', label: 'Plus vite', key: 'fast' },
+  { emoji: '☕', label: 'Pause',     key: 'break'},
+];
+
+export default function ReactionBar({ roomId, userName, toggleHand, handRaised }) {
   const { socket }      = useSocket();
   const { addReaction } = useUI();
   const [open, setOpen] = useState(false);
+  const [brbActive, setBrbActive] = useState(false);
+  const panelRef = useRef(null);
 
-  // Listen for reactions from OTHER participants
+  // Fermer sur clic extérieur
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (panelRef.current && !panelRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Écouter réactions des autres participants
   useEffect(() => {
     if (!socket) return;
-    const handler = (reaction) => {
-      console.log('[ReactionBar] received broadcast:', reaction);
-      addReaction(reaction);
-    };
+    const handler = (reaction) => addReaction(reaction);
     socket.on(EVENTS.REACTION_BROADCAST, handler);
     return () => socket.off(EVENTS.REACTION_BROADCAST, handler);
   }, [socket, addReaction]);
 
-  const send = (emoji) => {
-    if (!socket) {
-      console.warn('[ReactionBar] no socket!');
-      return;
-    }
-    console.log('[ReactionBar] emitting reaction:', emoji, 'room:', roomId, 'user:', userName);
+  // ── Envoyer une réaction ──────────────────────────────────
+  const send = (emoji, isEffect = false) => {
+    if (!socket) return;
 
-    // Show immediately for the sender (server broadcasts to others only if
-    // using socket.to(roomId), so we must display locally ourselves)
+    // Affichage local immédiat
     addReaction({
       userId:    socket.id,
       userName:  userName || 'Moi',
       emoji,
+      isEffect,
       timestamp: Date.now(),
     });
 
-    // Emit to server so others receive it
-    socket.emit(EVENTS.REACTION, { roomId, emoji, userName: userName || 'Moi' });
+    // Broadcast aux autres
+    socket.emit(EVENTS.REACTION, {
+      roomId,
+      emoji,
+      isEffect,
+      userName: userName || 'Moi',
+    });
 
     setOpen(false);
   };
 
+  // ── Lever / baisser la main ───────────────────────────────
+  const handleRaiseHand = () => {
+    if (toggleHand) toggleHand();
+    setOpen(false);
+  };
+
+  // ── Be right back ─────────────────────────────────────────
+  const handleBrb = () => {
+    setBrbActive(v => !v);
+    send(brbActive ? '👋' : '⏳');
+    setOpen(false);
+  };
+
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors ${
-          open
-            ? 'bg-yellow-600 text-white'
-            : 'bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white'
-        }`}
-        title="Réactions"
-      >
-        <span className="text-xl leading-none">😀</span>
-        <span>Réaction</span>
-      </button>
+      <div style={{ position: 'relative' }} ref={panelRef}>
 
-      {open && (
-        <>
-          {/* Click outside to close */}
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+        {/* ── Bouton React ── */}
+        <button
+            onClick={() => setOpen(o => !o)}
+            style={{
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: 4,
+              padding: '8px 14px', borderRadius: 12, border: 'none',
+              cursor: 'pointer', fontFamily: 'inherit',
+              background: open ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.07)',
+              color: open ? '#fbbf24' : 'rgba(255,255,255,0.75)',
+              transition: 'all 0.15s',
+              minWidth: 64,
+            }}
+            onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+            onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
+            title="Réagir"
+        >
+        <span style={{ fontSize: 20, lineHeight: 1 }}>
+          {handRaised ? '✋' : '😀'}
+        </span>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.03em' }}>
+          {handRaised ? 'Main levée' : 'Réagir'}
+        </span>
+        </button>
 
-          <div className="absolute bottom-full mb-2 right-0 bg-gray-800 border border-gray-700 rounded-2xl p-3 shadow-2xl z-50 min-w-[200px]">
-            <p className="text-gray-500 text-[10px] uppercase tracking-wider mb-2 px-1">
-              Choisir une réaction
-            </p>
-            <div className="grid grid-cols-4 gap-1">
-              {EMOJIS.map(({ emoji, label }) => (
-                <button
-                  key={emoji}
-                  onClick={() => send(emoji)}
-                  className="flex flex-col items-center gap-0.5 p-2 rounded-xl hover:bg-gray-700 transition-all hover:scale-110 active:scale-95"
-                  title={label}
-                >
-                  <span className="text-2xl leading-none">{emoji}</span>
-                  <span className="text-gray-400 text-[9px]">{label}</span>
-                </button>
-              ))}
+        {/* ── Panneau déroulant style Zoom/Teams ── */}
+        {open && (
+            <div style={{
+              position: 'absolute',
+              bottom: 'calc(100% + 10px)',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: '#1e2433',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 16,
+              padding: '14px',
+              width: 280,
+              zIndex: 100,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
+              animation: 'popUp 0.18s cubic-bezier(0.34,1.56,0.64,1)',
+            }}>
+
+              {/* ── Section 1 : Send with effect ── */}
+              <p style={{
+                fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+                color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase',
+                margin: '0 0 8px',
+              }}>
+                Send with effect
+              </p>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 4, marginBottom: 14,
+              }}>
+                {EFFECT_REACTIONS.map(({ emoji, label }) => (
+                    <button
+                        key={emoji + 'e'}
+                        onClick={() => send(emoji, true)}
+                        title={label}
+                        style={{
+                          background: 'rgba(255,255,255,0.07)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: 10, cursor: 'pointer',
+                          padding: '7px 4px',
+                          fontSize: 20, lineHeight: 1,
+                          transition: 'all 0.15s',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
+                          e.currentTarget.style.transform = 'scale(1.2)';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
+                          e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                    >
+                      {emoji}
+                    </button>
+                ))}
+              </div>
+
+              {/* Séparateur */}
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '0 0 12px' }} />
+
+              {/* ── Section 2 : Reactions ── */}
+              <p style={{
+                fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+                color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase',
+                margin: '0 0 8px',
+              }}>
+                Reactions
+              </p>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 4, marginBottom: 14,
+              }}>
+                {QUICK_REACTIONS.map(({ emoji, label }) => (
+                    <button
+                        key={emoji + 'q'}
+                        onClick={() => send(emoji, false)}
+                        title={label}
+                        style={{
+                          background: 'transparent', border: 'none', cursor: 'pointer',
+                          borderRadius: 8, padding: '6px 2px',
+                          fontSize: 22, lineHeight: 1,
+                          transition: 'transform 0.15s',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.3)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      {emoji}
+                    </button>
+                ))}
+              </div>
+
+              {/* ── Section 3 : Boutons statut ── */}
+              <div style={{
+                display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap',
+              }}>
+                {STATUS_BUTTONS.map(({ emoji, label, key }) => (
+                    <button
+                        key={key}
+                        onClick={() => send(emoji, false)}
+                        title={label}
+                        style={{
+                          background: 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          borderRadius: 10, cursor: 'pointer',
+                          padding: '7px 10px', fontSize: 18, lineHeight: 1,
+                          transition: 'all 0.15s',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.16)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                    >
+                      {emoji}
+                    </button>
+                ))}
+              </div>
+
+              {/* Séparateur */}
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '0 0 10px' }} />
+
+              {/* ── Raise hand ── */}
+              <button
+                  onClick={handleRaiseHand}
+                  style={{
+                    width: '100%', padding: '10px 14px',
+                    borderRadius: 10, border: 'none', cursor: 'pointer',
+                    background: handRaised
+                        ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.06)',
+                    color: handRaised ? '#fbbf24' : 'rgba(255,255,255,0.8)',
+                    fontSize: 13, fontWeight: 600,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    transition: 'all 0.15s', fontFamily: 'inherit',
+                    marginBottom: 6,
+                    border: handRaised
+                        ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(255,255,255,0.08)',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = handRaised
+                      ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.12)'}
+                  onMouseLeave={e => e.currentTarget.style.background = handRaised
+                      ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.06)'}
+              >
+                <span style={{ fontSize: 18 }}>✋</span>
+                {handRaised ? 'Baisser la main' : 'Raise hand'}
+              </button>
+
+              {/* ── Be right back ── */}
+              <button
+                  onClick={handleBrb}
+                  style={{
+                    width: '100%', padding: '10px 14px',
+                    borderRadius: 10, border: 'none', cursor: 'pointer',
+                    background: brbActive
+                        ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.06)',
+                    color: brbActive ? '#a78bfa' : 'rgba(255,255,255,0.8)',
+                    fontSize: 13, fontWeight: 600,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    transition: 'all 0.15s', fontFamily: 'inherit',
+                    border: brbActive
+                        ? '1px solid rgba(139,92,246,0.35)' : '1px solid rgba(255,255,255,0.08)',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = brbActive
+                      ? 'rgba(139,92,246,0.3)' : 'rgba(255,255,255,0.12)'}
+                  onMouseLeave={e => e.currentTarget.style.background = brbActive
+                      ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.06)'}
+              >
+                <span style={{ fontSize: 18 }}>⏳</span>
+                {brbActive ? 'Je suis de retour' : 'Be right back'}
+              </button>
             </div>
-          </div>
-        </>
-      )}
-    </div>
+        )}
+
+        <style>{`
+        @keyframes popUp {
+          from { opacity:0; transform:translateX(-50%) translateY(8px) scale(0.95); }
+          to   { opacity:1; transform:translateX(-50%) translateY(0)    scale(1); }
+        }
+      `}</style>
+      </div>
   );
 }
