@@ -8,6 +8,7 @@ export const useSocket = () => {
   if (!ctx) throw new Error('useSocket must be inside SocketProvider');
   return ctx;
 };
+console.log("🧠 SocketProvider MOUNT");
 
 export function SocketProvider({ children }) {
   const [socket, setSocket] = useState(null);
@@ -17,6 +18,7 @@ export function SocketProvider({ children }) {
 
   useEffect(() => {
     console.log(`Tentative de connexion à WebSocket : ${API_URL}`);
+
     const s = io(API_URL, {
       transports: ['websocket', 'polling'],
       withCredentials: true,
@@ -24,6 +26,8 @@ export function SocketProvider({ children }) {
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
     });
+
+    setSocket(s);
 
     s.on('connect', () => {
       setConnected(true);
@@ -35,12 +39,15 @@ export function SocketProvider({ children }) {
       console.log('❌ Socket disconnected');
     });
 
-    s.on('connect_error', (e) => console.warn('⚠️ Socket error:', e.message));
+    s.on('connect_error', (e) => {
+      console.warn('⚠️ Socket error:', e.message);
+    });
 
-    setSocket(s);
-
-    return () => s.disconnect();
-  }, [API_URL]);
+    return () => {
+      console.log('🧹 Socket cleanup');
+      s.disconnect();
+    };
+  }, []);
 
   return (
       <SocketContext.Provider value={{ socket, connected }}>

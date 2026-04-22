@@ -77,4 +77,20 @@ export const EVENTS = {
   WAITING_ADMIT:    "waiting-admit",     // hôte → serveur : admettre un utilisateur
   WAITING_REJECT:   "waiting-reject",    // hôte → serveur : refuser un utilisateur
   WAITING_ADMIT_ALL:"waiting-admit-all", // hôte → serveur : admettre tout le monde
+
+
+  // ─── Ajouter ces constantes dans les deux fichiers events.js ─
+// client/src/utils/events.js  ET  server/src/constants/events.js
+
+// Transfert de fichiers dans le chat
+  FILE_TRANSFER_START:    "file-transfer-start",
+  FILE_TRANSFER_READY:    "file-transfer-ready",
+  FILE_TRANSFER_CHUNK:    "file-transfer-chunk",
+  FILE_TRANSFER_PROGRESS: "file-transfer-progress",
+  FILE_TRANSFER_ERROR:    "file-transfer-error",
+  FILE_TRANSFER_CANCEL:   "file-transfer-cancel",
+
+// Réactions sur messages
+  CHAT_REACTION:          "chat-reaction",
+
 };

@@ -20,8 +20,11 @@ export function UIProvider({ children }) {
   const reactionCounter = useRef(0);
 
   const addReaction = useCallback((reaction) => {
-    // Use an incrementing counter to guarantee unique IDs
-    const id = `reaction-${Date.now()}-${++reactionCounter.current}`;
+    const id =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `reaction-${Date.now()}-${Math.random()}`;
+
     const item = { ...reaction, id };
 
     console.log('[UIContext] addReaction called:', item);
@@ -32,7 +35,6 @@ export function UIProvider({ children }) {
       return next;
     });
 
-    // Auto-remove after 3.5s
     setTimeout(() => {
       setReactions(prev => prev.filter(r => r.id !== id));
     }, 3500);
