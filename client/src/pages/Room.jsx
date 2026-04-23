@@ -15,6 +15,8 @@ import Whiteboard        from '../components/layout/Whiteboard.jsx';
 import BreakoutPanel     from '../components/layout/BreakoutPanel.jsx';
 import ReactionsOverlay  from '../components/layout/ReactionsOverlay.jsx';
 
+
+
 // ── Meeting Timer ─────────────────────────────────────────────
 function MeetingTimer() {
   const [secs, setSecs] = useState(0);
@@ -201,6 +203,8 @@ export default function Room({ roomId, userName, onLeave }) {
   const [showInvite,  setShowInvite]  = useState(true);
   const [handRaised,  setHandRaised]  = useState(false);
   const [showHands,   setShowHands]   = useState(false);
+    //ajout pour resolution du problem effet miroir lors  du full sharing screen
+  const [isScreenShareActive, setIsScreenShareActive] = useState(false);
 
   // Auto-show raised hands panel when someone raises hand
   const raisedCount = participants.filter(p => p.handRaised).length;
@@ -445,11 +449,11 @@ export default function Room({ roomId, userName, onLeave }) {
         )}
 
         {/* ── MAIN AREA ── */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-            <VideoGrid />
-            <ReactionsOverlay />
-          </div>
+          <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+              <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+                  <VideoGrid isScreenShareActive={isScreenShareActive} />
+                  <ReactionsOverlay />
+              </div>
 
           {/* Sidebars */}
           <ParticipantsPanel roomId={roomId} />
@@ -457,15 +461,16 @@ export default function Room({ roomId, userName, onLeave }) {
         </div>
 
         {/* ── CONTROL BAR ── */}
-        <div style={{ flexShrink: 0 }}>
-          <ControlBar
-              roomId={roomId}
-              userName={userName}
-              onLeave={handleLeave}
-              toggleHand={handleToggleHand}
-              handRaised={handRaised}
-          />
-        </div>
+          <div style={{ flexShrink: 0 }}>
+              <ControlBar
+                  roomId={roomId}
+                  userName={userName}
+                  onLeave={handleLeave}
+                  toggleHand={handleToggleHand}
+                  handRaised={handRaised}
+                  onScreenShareChange={setIsScreenShareActive}
+              />
+          </div>
 
         <Whiteboard roomId={roomId} />
         <BreakoutPanel roomId={roomId} />

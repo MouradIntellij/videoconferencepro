@@ -17,34 +17,29 @@ export default function VideoTile({
     const containerRef = useRef(null);
     const { screenSharingId } = useRoom();
 
-    // 🎥 Attach stream + fix mirror
+    // 🎥 Attach stream + FIX MIRROR PROPRE
     useEffect(() => {
         const el = videoRef.current;
         if (!el || !stream) return;
 
         el.srcObject = stream;
 
-        // ✅ MIRROR FIX:
-        // - Local camera tile → mirror (natural selfie view)
-        // - Remote streams → NEVER mirror
-        // - Screen share stream → NEVER mirror (would flip text/UI)
-        const isScreenShare = screenSharingId === socketId && !isLocal;
-        if (isLocal && !isScreenShare) {
-            el.style.transform = 'scaleX(-1)';
-        } else {
-            el.style.transform = 'none';
-        }
+        // ✅ Désactiver l'effet miroir de manière forcée et définitive
+        el.style.transform = 'none !important';
 
         el.play().catch(() => {});
 
         return () => {
             el.srcObject = null;
         };
-    }, [stream, isLocal, screenSharingId, socketId]);
+    }, [stream]);
 
+    // 🟢 Screen sharer detection UI
     const isScreenSharer = screenSharingId === socketId;
 
-    // Avatar gradient based on name
+    // 🎯 Auto focus (suppression de la logique inutilisée)
+
+    // Avatar colors
     const avatarColors = [
         ['#1d4ed8', '#7c3aed'],
         ['#065f46', '#0891b2'],
@@ -78,106 +73,59 @@ export default function VideoTile({
                 autoPlay
                 playsInline
                 muted={isLocal}
-                className={`w-full h-full object-cover ${stream && !videoOff ? 'block' : 'hidden'}`}
-                style={{ display: stream && !videoOff ? 'block' : 'none' }}
+                className={`w-full h-full object-cover ${
+                    stream && !videoOff ? 'block' : 'hidden'
+                }`}
             />
 
-            {/* 👤 AVATAR when no video */}
+            {/* 👤 AVATAR */}
             {(!stream || videoOff) && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                    <div style={{
-                        width: 52, height: 52, borderRadius: '50%',
-                        background: `linear-gradient(135deg, ${colorPair[0]}, ${colorPair[1]})`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 20, fontWeight: 700, color: '#fff',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-                    }}>
+                <div className="flex flex-col items-center gap-2">
+                    <div
+                        style={{
+                            width: 52,
+                            height: 52,
+                            borderRadius: '50%',
+                            background: `linear-gradient(135deg, ${colorPair[0]}, ${colorPair[1]})`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 20,
+                            fontWeight: 700,
+                            color: '#fff',
+                        }}
+                    >
                         {name?.[0]?.toUpperCase() ?? '?'}
                     </div>
-                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 500 }}>
-            {name}
-          </span>
+                    <span className="text-gray-400 text-sm">{name}</span>
                 </div>
             )}
 
             {/* 🏷️ NAME BAR */}
-            <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0,
-                padding: '14px 8px 6px',
-                background: 'linear-gradient(transparent, rgba(0,0,0,0.75))',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-                    {muted && (
-                        <div style={{
-                            background: 'rgba(239,68,68,0.85)', borderRadius: 4,
-                            padding: '1px 5px', fontSize: 9,
-                        }}>🔇</div>
-                    )}
-                    {videoOff && (
-                        <div style={{
-                            background: 'rgba(239,68,68,0.85)', borderRadius: 4,
-                            padding: '1px 5px', fontSize: 9,
-                        }}>📷</div>
-                    )}
-                    <span style={{
-                        color: '#f1f5f9', fontSize: 11, fontWeight: 600,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        maxWidth: 110,
-                    }}>
-            {name}
-                        {isLocal && <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 400 }}> (Vous)</span>}
-                        {isHost && <span style={{ color: '#fbbf24' }}> 👑</span>}
-          </span>
+            <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-gradient-to-t from-black/70 to-transparent flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                    {muted && <span className="text-red-400 text-xs">🔇</span>}
+                    {videoOff && <span className="text-red-400 text-xs">📷</span>}
+
+                    <span className="text-white text-xs font-medium truncate max-w-[120px]">
+                        {name}
+                        {isLocal && <span className="text-gray-400"> (Vous)</span>}
+                        {isHost && <span className="text-yellow-400"> 👑</span>}
+                    </span>
                 </div>
 
                 {handRaised && (
-                    <span style={{
-                        fontSize: 14,
-                        animation: 'handWave 0.8s ease-in-out infinite alternate',
-                        display: 'inline-block',
-                    }}>
-            ✋
-          </span>
+                    <span className="text-yellow-400 text-sm animate-bounce">✋</span>
                 )}
             </div>
 
             {/* 📺 SCREEN SHARE BADGE */}
             {isScreenSharer && (
-                <div style={{
-                    position: 'absolute', top: 8, left: 8,
-                    background: 'rgba(34,197,94,0.9)',
-                    color: '#fff', fontSize: 10, fontWeight: 700,
-                    padding: '3px 8px', borderRadius: 6,
-                    display: 'flex', alignItems: 'center', gap: 4,
-                    backdropFilter: 'blur(4px)',
-                }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff', animation: 'pulse 1.5s infinite' }} />
-                    Partage écran
+                <div className="absolute top-2 left-2 bg-green-500 text-white text-xs px-3 py-1.5 rounded-md font-bold animate-pulse flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"></span>
+                    Partage d'écran
                 </div>
             )}
-
-            {/* Speaking indicator */}
-            {isActive && !isScreenSharer && (
-                <div style={{
-                    position: 'absolute', top: 8, right: 8,
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: '#22c55e',
-                    boxShadow: '0 0 8px rgba(34,197,94,0.8)',
-                    animation: 'pulse 1s ease-in-out infinite',
-                }} />
-            )}
-
-            <style>{`
-        @keyframes handWave {
-          from { transform: rotate(-10deg); }
-          to { transform: rotate(10deg); }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.6; transform: scale(0.85); }
-        }
-      `}</style>
         </div>
     );
 }

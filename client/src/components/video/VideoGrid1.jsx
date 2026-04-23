@@ -1,38 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { useMedia } from '../../context/MediaContext.jsx';
-import { useRoom } from '../../context/RoomContext.jsx';
-import { useUI } from '../../context/UIContext.jsx';
+import { useMedia }  from '../../context/MediaContext.jsx';
+import { useRoom }   from '../../context/RoomContext.jsx';
+import { useUI }     from '../../context/UIContext.jsx';
 import { useSocket } from '../../context/SocketContext.jsx';
-import VideoTile from './VideoTile.jsx';
+import VideoTile     from './VideoTile.jsx';
 
-// ─── VideoPlayer (Composant réutilisable pour les flux vidéo) ──────
-const VideoPlayer = ({ stream, muted, style, className }) => {
+// ─── PiP Camera overlay (local cam during screen share) ──────
+function PipCamera({ stream, name, muted, videoOff }) {
     const videoRef = useRef(null);
+    const [hover, setHover] = useState(false);
 
     useEffect(() => {
         const el = videoRef.current;
         if (!el || !stream) return;
         el.srcObject = stream;
-        el.style.transform = 'none !important'; // Désactiver l'effet miroir
         el.play().catch(() => {});
         return () => { el.srcObject = null; };
     }, [stream]);
-
-    return (
-        <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted={muted}
-            style={style}
-            className={className}
-        />
-    );
-};
-
-// ─── PipCamera (Mini-caméra flottante) ──────
-const PipCamera = ({ stream, name, muted, videoOff }) => {
-    const [hover, setHover] = useState(false);
 
     return (
         <div
@@ -40,182 +24,80 @@ const PipCamera = ({ stream, name, muted, videoOff }) => {
             onMouseLeave={() => setHover(false)}
             style={{
                 position: 'absolute',
-                bottom: 20,
-                right: 20,
-                width: 180,
-                height: 102,
-                zIndex: 100,
+                bottom: 80,
+                right: 16,
+                width: 200,
+                height: 113,
+                zIndex: 60,
                 borderRadius: 12,
                 overflow: 'hidden',
-                border: '2px solid rgba(255, 255, 255, 0.25)',
+                border: '2px solid rgba(255,255,255,0.25)',
                 background: '#111',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
                 transition: 'transform 0.2s, opacity 0.2s',
                 transform: hover ? 'scale(1.04)' : 'scale(1)',
                 cursor: 'grab',
             }}
         >
-            {!videoOff && stream ? (
-                <VideoPlayer
-                    stream={stream}
-                    muted={muted}
+            {stream && !videoOff ? (
+                <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
                     style={{
                         width: '100%',
                         height: '100%',
                         objectFit: 'cover',
                         display: 'block',
-                    }}
-                />
-            ) : (
-                <div style={{
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    background: '#1a1f2e',
-                }}>
-                    <div style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 14,
-                        fontWeight: 700,
-                        color: '#fff',
-                    }}>
-                        {name?.[0]?.toUpperCase() ?? '?'}
-                    </div>
-                </div>
-            )}
-            <div style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                background: 'linear-gradient(transparent, rgba(0, 0, 0, 0.85))',
-                padding: '8px 6px 4px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-            }}>
-                {muted && <span style={{ color: '#f87171', fontSize: 9 }}>🔇</span>}
-                <span style={{ fontSize: 10, color: '#e2e8f0', fontWeight: 600 }}>
-                    Vous
-                </span>
-            </div>
-        </div>
-    );
-};
-
-// ─── FilmstripTile (Vignette de participant) ──────
-const FilmstripTile = ({ stream, name, isLocal, isHost, muted, videoOff, handRaised, isActive }) => {
-    return (
-        <div style={{
-            position: 'relative',
-            width: 140,
-            height: 78,
-            flexShrink: 0,
-            borderRadius: 8,
-            overflow: 'hidden',
-            background: '#1a1f2e',
-            border: isActive
-                ? '2px solid #22c55e'
-                : handRaised
-                    ? '2px solid #f59e0b'
-                    : '1px solid rgba(255,255,255,0.1)',
-            transition: 'border-color 0.2s',
-        }}>
-            {!videoOff && stream ? (
-                <VideoPlayer
-                    stream={stream}
-                    muted={true}
-                    style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        display: 'block',
+                        // ✅ FIX MIRROR: local cam should be mirrored for self-view only
+                        transform: 'scaleX(-1)',
                     }}
                 />
             ) : (
                 <div style={{
                     width: '100%', height: '100%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: '#1e2440',
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    gap: 6, background: '#1a1f2e',
                 }}>
                     <div style={{
-                        width: 32, height: 32, borderRadius: '50%',
+                        width: 36, height: 36, borderRadius: '50%',
                         background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 13, fontWeight: 700, color: '#fff',
+                        fontSize: 14, fontWeight: 700, color: '#fff',
                     }}>
                         {name?.[0]?.toUpperCase() ?? '?'}
                     </div>
                 </div>
             )}
-
-            {/* Name bar */}
             <div style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0,
-                background: 'linear-gradient(transparent, rgba(0,0,0,0.85))',
-                padding: '10px 5px 4px',
-                display: 'flex', alignItems: 'center', gap: 3,
+                background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+                padding: '12px 8px 5px',
+                fontSize: 10, color: 'rgba(255,255,255,0.9)', fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 4,
             }}>
-                {muted && <span style={{ fontSize: 8, color: '#f87171' }}>🔇</span>}
-                <span style={{ fontSize: 9, color: '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>
-                    {name}{isHost ? ' 👑' : ''}
-                    {isLocal ? ' (Vous)' : ''}
-                </span>
-                {handRaised && <span style={{ fontSize: 10, marginLeft: 'auto' }}>✋</span>}
+                {muted && <span style={{ color: '#f87171', fontSize: 9 }}>🔇</span>}
+                Vous
             </div>
-
-            {/* Active speaker glow */}
-            {isActive && (
-                <div style={{
-                    position: 'absolute', inset: 0,
-                    boxShadow: 'inset 0 0 12px rgba(34,197,94,0.4)',
-                    borderRadius: 8, pointerEvents: 'none',
-                }} />
-            )}
         </div>
     );
-};
+}
 
-// ─── ScreenShareFullscreen (Affichage plein écran du partage) ──────
-const ScreenShareFullscreen = ({ screenStream, localStream, participants, remoteStreams, hostId, audioEnabled, videoEnabled, activeSpeakerId }) => {
+// ─── Screen Share Fullscreen View (Teams/Zoom style) ─────────
+function ScreenShareFullscreen({ screenStream, localStream, participants, remoteStreams, hostId, audioEnabled, videoEnabled, activeSpeakerId }) {
     const screenVideoRef = useRef(null);
-    const [controlsVisible, setControlsVisible] = useState(true);
 
     useEffect(() => {
         const el = screenVideoRef.current;
         if (!el || !screenStream) return;
         el.srcObject = screenStream;
-        el.style.transform = 'none !important';
+        // ✅ FIX: screen share MUST NOT be mirrored
+        el.style.transform = 'none';
         el.play().catch(() => {});
         return () => { el.srcObject = null; };
     }, [screenStream]);
-
-    // Masquer les contrôles après 3 secondes d'inactivité
-    useEffect(() => {
-        let timer;
-        const handleMouseMove = () => {
-            setControlsVisible(true);
-            clearTimeout(timer);
-            timer = setTimeout(() => setControlsVisible(false), 3000);
-        };
-
-        window.addEventListener('mousemove', handleMouseMove);
-
-        return () => {
-            clearTimeout(timer);
-            window.removeEventListener('mousemove', handleMouseMove);
-        };
-    }, []);
 
     return (
         <div style={{
@@ -226,7 +108,7 @@ const ScreenShareFullscreen = ({ screenStream, localStream, participants, remote
             display: 'flex',
             flexDirection: 'column',
         }}>
-            {/* Main screen area */}
+            {/* ── MAIN SCREEN AREA ── */}
             <div style={{
                 flex: 1,
                 position: 'relative',
@@ -234,31 +116,27 @@ const ScreenShareFullscreen = ({ screenStream, localStream, participants, remote
                 alignItems: 'center',
                 justifyContent: 'center',
                 overflow: 'hidden',
+                // ✅ Green border like Zoom when sharing
                 outline: '3px solid #22c55e',
                 outlineOffset: '-3px',
             }}>
-                <VideoPlayer
+                <video
                     ref={screenVideoRef}
-                    stream={screenStream}
-                    muted={true}
+                    autoPlay
+                    playsInline
+                    muted
                     style={{
                         width: '100%',
                         height: '100%',
                         objectFit: 'contain',
                         display: 'block',
+                        // ✅ CRITICAL: NEVER mirror screen share
+                        transform: 'none !important',
                         background: '#000',
                     }}
                 />
 
-                {/* Mini-caméra flottante */}
-                <PipCamera
-                    stream={localStream}
-                    name="Vous"
-                    muted={!audioEnabled}
-                    videoOff={!videoEnabled}
-                />
-
-                {/* Indicateur de partage d'écran */}
+                {/* Top bar: sharing indicator */}
                 <div style={{
                     position: 'absolute',
                     top: 12,
@@ -267,30 +145,26 @@ const ScreenShareFullscreen = ({ screenStream, localStream, participants, remote
                     background: 'rgba(34,197,94,0.95)',
                     color: '#fff',
                     borderRadius: 20,
-                    padding: '6px 16px',
+                    padding: '5px 16px',
                     fontSize: 12,
                     fontWeight: 700,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
+                    gap: 6,
                     boxShadow: '0 4px 16px rgba(34,197,94,0.4)',
                     backdropFilter: 'blur(8px)',
                     zIndex: 10,
-                    transition: 'opacity 0.3s',
-                    opacity: controlsVisible ? 1 : 0,
                 }}>
-                    <span style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: '#fff',
-                        animation: 'pulse 1.5s ease-in-out infinite',
-                    }} />
+          <span style={{
+              width: 7, height: 7, borderRadius: '50%',
+              background: '#fff',
+              animation: 'pulse 1.5s ease-in-out infinite',
+          }} />
                     Partage d'écran en cours
                 </div>
             </div>
 
-            {/* Bottom filmstrip: participants */}
+            {/* ── BOTTOM FILMSTRIP: participants ── */}
             <div style={{
                 height: 100,
                 background: 'rgba(10,10,20,0.95)',
@@ -328,14 +202,105 @@ const ScreenShareFullscreen = ({ screenStream, localStream, participants, remote
             </div>
 
             <style>{`
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.5; }
-                }
-            `}</style>
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.8); }
+        }
+      `}</style>
         </div>
     );
-};
+}
+
+// ─── Filmstrip tile (bottom bar during screen share) ─────────
+function FilmstripTile({ stream, name, isLocal, isHost, muted, videoOff, handRaised, isActive }) {
+    const videoRef = useRef(null);
+
+    useEffect(() => {
+        const el = videoRef.current;
+        if (!el || !stream) return;
+        el.srcObject = stream;
+        // ✅ Mirror only local camera, NEVER screen share
+        if (isLocal) {
+            el.style.transform = 'scaleX(-1)';
+        } else {
+            el.style.transform = 'none';
+        }
+        el.play().catch(() => {});
+        return () => { el.srcObject = null; };
+    }, [stream, isLocal]);
+
+    return (
+        <div style={{
+            position: 'relative',
+            width: 140,
+            height: 78,
+            flexShrink: 0,
+            borderRadius: 8,
+            overflow: 'hidden',
+            background: '#1a1f2e',
+            border: isActive
+                ? '2px solid #22c55e'
+                : handRaised
+                    ? '2px solid #f59e0b'
+                    : '1px solid rgba(255,255,255,0.1)',
+            transition: 'border-color 0.2s',
+        }}>
+            {stream && !videoOff ? (
+                <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                    }}
+                />
+            ) : (
+                <div style={{
+                    width: '100%', height: '100%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: '#1e2440',
+                }}>
+                    <div style={{
+                        width: 32, height: 32, borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 13, fontWeight: 700, color: '#fff',
+                    }}>
+                        {name?.[0]?.toUpperCase() ?? '?'}
+                    </div>
+                </div>
+            )}
+
+            {/* Name bar */}
+            <div style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0,
+                background: 'linear-gradient(transparent, rgba(0,0,0,0.85))',
+                padding: '10px 5px 4px',
+                display: 'flex', alignItems: 'center', gap: 3,
+            }}>
+                {muted && <span style={{ fontSize: 8, color: '#f87171' }}>🔇</span>}
+                <span style={{ fontSize: 9, color: '#e2e8f0', fontWeight: 600, truncate: true, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>
+          {name}{isHost ? ' 👑' : ''}
+                    {isLocal ? ' (Vous)' : ''}
+        </span>
+                {handRaised && <span style={{ fontSize: 10, marginLeft: 'auto' }}>✋</span>}
+            </div>
+
+            {/* Active speaker glow */}
+            {isActive && (
+                <div style={{
+                    position: 'absolute', inset: 0,
+                    boxShadow: 'inset 0 0 12px rgba(34,197,94,0.4)',
+                    borderRadius: 8, pointerEvents: 'none',
+                }} />
+            )}
+        </div>
+    );
+}
 
 // ─── Main VideoGrid component ─────────────────────────────────
 export default function VideoGrid() {
@@ -351,7 +316,7 @@ export default function VideoGrid() {
     const { activeSpeakerId, layout } = useUI();
     const { socket } = useSocket();
 
-    // Screen share mode
+    // ── SCREEN SHARE MODE (Teams/Zoom style fullscreen) ──────
     if (screenStream) {
         return (
             <ScreenShareFullscreen
@@ -367,7 +332,7 @@ export default function VideoGrid() {
         );
     }
 
-    // Spotlight mode
+    // ── SPOTLIGHT MODE (one big speaker + filmstrip) ──────────
     if (layout === 'spotlight' && (participants.length > 0 || activeSpeakerId)) {
         const spotlightId = activeSpeakerId || participants[0]?.socketId;
         const spotlightP = participants.find(p => p.socketId === spotlightId);
@@ -435,8 +400,10 @@ export default function VideoGrid() {
         );
     }
 
-    // Default grid mode
+    // ── DEFAULT GRID MODE ─────────────────────────────────────
     const totalCount = participants.length + 1; // +1 for local
+
+    // Compute responsive grid columns
     const cols = totalCount <= 1 ? 1
         : totalCount <= 2 ? 2
             : totalCount <= 4 ? 2
