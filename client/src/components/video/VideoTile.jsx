@@ -76,6 +76,7 @@ export default function VideoTile({
                 className={`w-full h-full object-cover ${
                     stream && !videoOff ? 'block' : 'hidden'
                 }`}
+                style={isScreenSharer ? { objectFit: 'contain', background: '#050816' } : undefined}
             />
 
             {/* 👤 AVATAR */}
@@ -121,9 +122,9 @@ export default function VideoTile({
 
             {/* 📺 SCREEN SHARE BADGE */}
             {isScreenSharer && (
-                <div className="absolute top-2 left-2 bg-green-500 text-white text-xs px-3 py-1.5 rounded-md font-bold animate-pulse flex items-center gap-1.5">
+                <div className="absolute top-2 left-2 bg-green-500/95 text-white text-xs px-3 py-1.5 rounded-full font-bold animate-pulse flex items-center gap-1.5 shadow-lg shadow-green-900/40 backdrop-blur-sm">
                     <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"></span>
-                    Partage d'écran
+                    Partage d'ecran
                 </div>
             )}
         </div>

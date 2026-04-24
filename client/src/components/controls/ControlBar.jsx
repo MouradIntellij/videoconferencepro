@@ -2,10 +2,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useMedia } from '../../context/MediaContext.jsx';
 import { useRoom } from '../../context/RoomContext.jsx';
 import { useUI } from '../../context/UIContext.jsx';
-import { useScreenShare } from '../../hooks/useScreenShare.js';
 import { useRecording } from '../../hooks/useRecording.js';
+import { useVirtualBackground } from '../../hooks/useVirtualBackground.js';
 import ReactionBar from './ReactionBar.jsx';
 import ScreenShareSelector from './ScreenShareSelector.jsx';
+import VirtualBackground from '../layout/VirtualBackground.jsx';
 
 // ══════════════════════════════════════════════════════════════
 //  ICÔNES SVG
@@ -86,18 +87,11 @@ function drawImageCover(ctx, img, W, H) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  PANNEAU ARRIÈRE-PLAN VIRTUEL
-// ══════════════════════════════════════════════════════════════
-function VirtualBgPanel({ open, localStream, peerConnections, onClose, onActiveChange }) {
-    // ... (le contenu de VirtualBgPanel reste inchangé)
-}
-
-// ══════════════════════════════════════════════════════════════
 //  BOUTONS DE LA BARRE
 // ══════════════════════════════════════════════════════════════
 function ZoomBtn({ onClick, active, danger, highlight, title, icon, label, pulse }) {
     return (
-        <button onClick={onClick} title={title} className={`relative flex flex-col items-center justify-center gap-1.5 min-w-[76px] px-3 py-3 rounded-2xl text-[10px] font-bold tracking-widest uppercase transition-all duration-150 select-none group ${danger?'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/50':highlight?'bg-purple-600 hover:bg-purple-500 text-white shadow-lg':active?'bg-gray-600 text-white ring-2 ring-white/30':'bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700/60'} ${pulse?'ring-2 ring-offset-1 ring-offset-gray-900 ring-purple-400':''}`}>
+        <button onClick={onClick} title={title} className={`relative flex flex-col items-center justify-center gap-1.5 min-w-[78px] px-3.5 py-3.5 rounded-[22px] text-[10px] font-bold tracking-[0.22em] uppercase transition-all duration-200 select-none group backdrop-blur-xl ${danger?'bg-red-600/90 hover:bg-red-500 text-white shadow-[0_16px_35px_rgba(127,29,29,0.45)] border border-red-400/30':highlight?'bg-emerald-500/18 hover:bg-emerald-500/24 text-emerald-100 shadow-[0_18px_40px_rgba(34,197,94,0.2)] border border-emerald-400/25':active?'bg-slate-700/90 text-white ring-2 ring-white/20 border border-white/10':'bg-slate-900/82 hover:bg-slate-800/92 text-slate-300 hover:text-white border border-white/10 shadow-[0_12px_30px_rgba(2,6,23,0.3)]'} ${pulse?'ring-2 ring-offset-2 ring-offset-slate-950 ring-emerald-400/60':''}`}>
             <span className="transition-transform duration-150 group-hover:scale-110 group-active:scale-95">{icon}</span>
             <span className="leading-none whitespace-nowrap">{label}</span>
         </button>
@@ -105,7 +99,7 @@ function ZoomBtn({ onClick, active, danger, highlight, title, icon, label, pulse
 }
 function PanelBtn({ onClick, active, title, icon, label }) {
     return (
-        <button onClick={onClick} title={title} className={`flex flex-col items-center justify-center gap-1 min-w-[56px] px-2 py-2 rounded-xl text-[9px] font-bold tracking-widest uppercase transition-all duration-150 ${active?'bg-blue-600 text-white shadow-md':'bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white border border-gray-700/40'}`}>
+        <button onClick={onClick} title={title} className={`flex flex-col items-center justify-center gap-1 min-w-[58px] px-2.5 py-2.5 rounded-2xl text-[9px] font-bold tracking-[0.2em] uppercase transition-all duration-200 backdrop-blur-xl ${active?'bg-blue-500/20 text-blue-100 border border-blue-400/25 shadow-[0_14px_30px_rgba(59,130,246,0.2)]':'bg-slate-900/72 hover:bg-slate-800/90 text-slate-400 hover:text-white border border-white/10'}`}>
             {icon}<span className="leading-none mt-0.5">{label}</span>
         </button>
     );
@@ -115,32 +109,62 @@ function PanelBtn({ onClick, active, title, icon, label }) {
 //  EXPORT PRINCIPAL
 // ══════════════════════════════════════════════════════════════
 export default function ControlBar({ roomId, onLeave, toggleHand, handRaised, userName }) {
-    const { audioEnabled, videoEnabled, toggleAudio, toggleVideo, localStream, peerConnections } = useMedia();
+    const {
+        audioEnabled,
+        videoEnabled,
+        toggleAudio,
+        toggleVideo,
+        localStream,
+        peerConnections,
+        isSharing,
+        startScreenShare,
+        stopScreenShare,
+        screenShareMeta,
+        setVirtualBackgroundStream,
+    } = useMedia();
     const { locked } = useRoom();
     const { chatOpen, setChatOpen, participantsOpen, setParticipantsOpen, whiteboardOpen, setWhiteboardOpen, layout, toggleLayout } = useUI();
-    const { isSharing, toggle: toggleScreenShare } = useScreenShare();
     const { isRecording, toggle: toggleRecording } = useRecording();
 
     const [bgOpen, setBgOpen] = useState(false);
     const [bgActive, setBgActive] = useState(false);
     const [showScreenShareSelector, setShowScreenShareSelector] = useState(false);
+    const virtualBackground = useVirtualBackground(
+        localStream,
+        peerConnections,
+        setVirtualBackgroundStream
+    );
 
-    const handleScreenShare = (option) => {
-        toggleScreenShare(option);
+    useEffect(() => {
+        setBgActive(virtualBackground.active);
+    }, [virtualBackground.active]);
+
+    const handleQuickScreenShare = async () => {
+        await startScreenShare(null, {
+            sound: false,
+            presenterMode: true,
+            optimize: 'detail',
+            displaySurface: 'window',
+        });
+    };
+
+    const handleScreenShare = async (stream, opts) => {
         setShowScreenShareSelector(false);
+        if (!stream) return;
+        await startScreenShare(stream, opts);
     };
 
     return (
         <>
-            <div className="bg-gray-900 border-t border-gray-800 px-4 py-3 flex items-center justify-between gap-2 shadow-2xl" style={{ minHeight:'84px' }}>
+            <div className="border-t border-white/10 bg-[linear-gradient(180deg,rgba(2,6,23,0.88)_0%,rgba(15,23,42,0.96)_100%)] px-4 py-3 flex items-center justify-between gap-3 shadow-[0_-18px_50px_rgba(2,6,23,0.45)] backdrop-blur-2xl" style={{ minHeight:'94px' }}>
                 {/* Gauche */}
                 <div className="hidden md:flex items-center gap-3 w-48 shrink-0">
-                    {locked && (<span className="flex items-center gap-1.5 text-yellow-400 text-xs font-medium"><svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Verrouillée</span>)}
-                    {isSharing && (<button onClick={() => toggleScreenShare('stop')} className="flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl"><svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>Arrêter le partage</button>)}
+                    {locked && (<span className="flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-[11px] font-semibold text-amber-200"><svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Réunion verrouillée</span>)}
+                    {isSharing && (<button onClick={stopScreenShare} className="flex items-center gap-2 rounded-full border border-red-400/25 bg-red-500/15 px-3.5 py-2 text-[11px] font-bold text-red-100 shadow-[0_12px_25px_rgba(127,29,29,0.28)] backdrop-blur-xl transition hover:bg-red-500/22"><svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>Arrêter le partage</button>)}
                 </div>
 
                 {/* Centre — tous les boutons */}
-                <div className="flex items-center gap-2 mx-auto flex-wrap justify-center">
+                <div className="flex items-center gap-2.5 mx-auto flex-wrap justify-center rounded-[28px] border border-white/10 bg-white/[0.03] px-3 py-2 shadow-[0_20px_50px_rgba(2,6,23,0.25)]">
                     <ZoomBtn onClick={toggleAudio} active={!audioEnabled} icon={audioEnabled?<I.MicOn/>:<I.MicOff/>} label={audioEnabled?'Micro':'Muet'} title={audioEnabled?'Couper le micro':'Activer le micro'}/>
                     <ZoomBtn onClick={toggleVideo} active={!videoEnabled} icon={videoEnabled?<I.CamOn/>:<I.CamOff/>} label={videoEnabled?'Vidéo':'Arrêtée'} title={videoEnabled?'Couper la caméra':'Activer la caméra'}/>
 
@@ -157,23 +181,33 @@ export default function ControlBar({ roomId, onLeave, toggleHand, handRaised, us
 
                     {/* ✅ BOUTON PARTAGE D'ÉCRAN */}
                     <ZoomBtn
-                        onClick={() => setShowScreenShareSelector(true)}
+                        onClick={() => isSharing ? stopScreenShare() : handleQuickScreenShare()}
                         highlight={isSharing}
                         pulse={isSharing}
                         icon={<I.Share/>}
-                        label={isSharing ? 'Arrêter' : 'Partager'}
-                        title="Partager l'écran"
+                        label={isSharing ? 'Partage' : 'Partager app'}
+                        title="Partager une application"
                     />
 
                     <ZoomBtn onClick={toggleRecording} active={isRecording} icon={isRecording?<I.Stop/>:<I.Rec/>} label={isRecording?'Stop Rec':'Enregistrer'} title={isRecording?"Arrêter l'enregistrement":"Démarrer l'enregistrement"}/>
                     <ReactionBar roomId={roomId} userName={userName} toggleHand={toggleHand} handRaised={handRaised}/>
                     <ZoomBtn onClick={toggleLayout} icon={layout==='grid'?<I.Grid/>:<I.Focus/>} label={layout==='grid'?'Grille':'Focus'} title="Changer la disposition"/>
-                    <div className="w-px h-12 bg-gray-700 mx-1 self-center"/>
+                    <div className="mx-1 h-12 w-px self-center bg-white/10"/>
                     <ZoomBtn onClick={onLeave} danger icon={<I.Phone/>} label="Quitter" title="Quitter la réunion"/>
                 </div>
 
                 {/* Droite */}
-                <div className="flex items-center gap-1.5 w-48 justify-end shrink-0">
+                <div className="flex items-center gap-2 w-48 justify-end shrink-0">
+                    {!isSharing && (
+                        <button
+                            onClick={() => setShowScreenShareSelector(true)}
+                            className="hidden lg:flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
+                            title="Choix avance de la source"
+                        >
+                            <I.Share/>
+                            Sources
+                        </button>
+                    )}
                     <PanelBtn onClick={()=>setParticipantsOpen(o=>!o)} active={participantsOpen} icon={<I.People/>} label="Participants"/>
                     <PanelBtn onClick={()=>setChatOpen(o=>!o)} active={chatOpen} icon={<I.Chat/>} label="Chat"/>
                     <PanelBtn onClick={()=>setWhiteboardOpen(o=>!o)} active={whiteboardOpen} icon={<I.Board/>} label="Tableau"/>
@@ -182,16 +216,12 @@ export default function ControlBar({ roomId, onLeave, toggleHand, handRaised, us
 
             {/* Panneau fond virtuel — s'ouvre AU-DESSUS de la barre */}
             {localStream && (
-                <VirtualBgPanel
-                    open={bgOpen}
-                    localStream={localStream}
-                    peerConnections={peerConnections}
-                    onClose={() => setBgOpen(false)}
-                    onActiveChange={active => {
-                        setBgActive(active);
-                        if (!active) setBgOpen(false);
-                    }}
-                />
+                bgOpen && (
+                    <VirtualBackground
+                        onClose={() => setBgOpen(false)}
+                        controller={virtualBackground}
+                    />
+                )
             )}
 
             {/* Sélecteur de partage d'écran */}
@@ -199,6 +229,7 @@ export default function ControlBar({ roomId, onLeave, toggleHand, handRaised, us
                 <ScreenShareSelector
                     onSelect={handleScreenShare}
                     onCancel={() => setShowScreenShareSelector(false)}
+                    activeShare={screenShareMeta}
                 />
             )}
         </>

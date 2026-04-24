@@ -15,8 +15,6 @@ export const useMedia = () => {
 
 export function MediaProvider({ children, initialStream = null }) {
   const { socket } = useSocket();
-
-  // 🔥 AJOUT IMPORTANT
   const { roomId, removeParticipant, setScreenSharingId } = useRoom();
 
   const [localStream, setLocalStream] = useState(initialStream);
@@ -24,6 +22,9 @@ export function MediaProvider({ children, initialStream = null }) {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [screenStream, setScreenStream] = useState(null);
+  const [screenShareMeta, setScreenShareMeta] = useState(null);
+  const [screenShareError, setScreenShareError] = useState('');
+  const [virtualBackgroundStream, setVirtualBackgroundStream] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
 
   const peerConnections = useRef(new Map());
@@ -31,17 +32,56 @@ export function MediaProvider({ children, initialStream = null }) {
   const chunksRef = useRef([]);
   const cleanupAudio = useRef(null);
   const localStreamRef = useRef(initialStream);
+  const isSharingRef = useRef(false);
 
   useEffect(() => {
     localStreamRef.current = localStream;
   }, [localStream]);
 
   // ─────────────────────────────────────────────
+  // HELPERS
+  // ─────────────────────────────────────────────
+  const replaceVideoTrackForAllPeers = useCallback((track) => {
+    if (!track) return;
+
+    peerConnections.current.forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) sender.replaceTrack(track);
+    });
+  }, []);
+
+  const stopStream = (stream) => {
+    stream?.getTracks().forEach(t => t.stop());
+  };
+
+  const looksLikeCurrentConferenceSurface = (track, settings = {}) => {
+    const displaySurface = settings.displaySurface || '';
+    if (displaySurface !== 'browser') return false;
+
+    const label = (track?.label || '').toLowerCase();
+    const title = (document?.title || '').toLowerCase();
+    const host = (window?.location?.host || '').toLowerCase();
+
+    return Boolean(
+      label &&
+      (
+        (title && (label.includes(title) || title.includes(label))) ||
+        (host && label.includes(host)) ||
+        label.includes('videoconf') ||
+        label.includes('video conf') ||
+        label.includes('localhost') ||
+        label.includes('127.0.0.1')
+      )
+    );
+  };
+
+  // ─────────────────────────────────────────────
   // AUDIO ANALYSER
   // ─────────────────────────────────────────────
   useEffect(() => {
     if (!initialStream || !socket || !roomId) return;
-    if (cleanupAudio.current) cleanupAudio.current();
+
+    cleanupAudio.current?.();
 
     cleanupAudio.current = createAudioAnalyser(initialStream, (level) => {
       socket.emit(EVENTS.AUDIO_LEVEL, { roomId, level });
@@ -72,13 +112,11 @@ export function MediaProvider({ children, initialStream = null }) {
       peerConnections.current.get(targetId).close();
     }
 
-    const stream = localStreamRef.current;
-
     const pc = createPeerConnection({
       targetId,
       socket,
       roomId,
-      stream,
+      stream: localStreamRef.current,
       onTrack: addRemoteStream
     });
 
@@ -100,11 +138,12 @@ export function MediaProvider({ children, initialStream = null }) {
     localStreamRef.current = stream;
     setLocalStream(stream);
 
-    if (cleanupAudio.current) cleanupAudio.current();
+    cleanupAudio.current?.();
 
     cleanupAudio.current = createAudioAnalyser(stream, (level) => {
-      if (socket && roomId)
+      if (socket && roomId) {
         socket.emit(EVENTS.AUDIO_LEVEL, { roomId, level });
+      }
     });
 
     return stream;
@@ -114,8 +153,7 @@ export function MediaProvider({ children, initialStream = null }) {
   // AUDIO / VIDEO TOGGLES
   // ─────────────────────────────────────────────
   const toggleAudio = useCallback(() => {
-    const stream = localStreamRef.current;
-    const track = stream?.getAudioTracks()[0];
+    const track = localStreamRef.current?.getAudioTracks()[0];
     if (!track) return;
 
     track.enabled = !track.enabled;
@@ -129,8 +167,7 @@ export function MediaProvider({ children, initialStream = null }) {
   }, [socket, roomId]);
 
   const toggleVideo = useCallback(() => {
-    const stream = localStreamRef.current;
-    const track = stream?.getVideoTracks()[0];
+    const track = localStreamRef.current?.getVideoTracks()[0];
     if (!track) return;
 
     track.enabled = !track.enabled;
@@ -144,54 +181,81 @@ export function MediaProvider({ children, initialStream = null }) {
   }, [socket, roomId]);
 
   // ─────────────────────────────────────────────
-  // 🎯 SCREEN SHARE FIX (IMPORTANT PART)
+  // SCREEN SHARE
   // ─────────────────────────────────────────────
-  const startScreenShare = useCallback(async () => {
+  const startScreenShare = useCallback(async (providedStream = null, options = {}) => {
+    if (isSharingRef.current) return; // 🚨 anti double call
+
+    isSharingRef.current = true;
+    setScreenShareError('');
+
     try {
-      const screen = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: false
+      const wantsBroadPicker = !providedStream && !options.displaySurface;
+      const screen = providedStream || await navigator.mediaDevices.getDisplayMedia({
+        video: wantsBroadPicker ? {
+          frameRate: options.optimize === 'motion' ? { ideal: 30, max: 60 } : { ideal: 15, max: 30 }
+        } : {
+          displaySurface: options.displaySurface,
+          frameRate: options.optimize === 'motion' ? { ideal: 30, max: 60 } : { ideal: 15, max: 30 }
+        },
+        audio: Boolean(options.sound),
+        preferCurrentTab: false,
+        selfBrowserSurface: 'exclude',
+        surfaceSwitching: 'include',
+        systemAudio: options.sound ? 'include' : 'exclude',
       });
 
-      setScreenStream(screen);
+      const track = screen.getVideoTracks()[0];
+      const settings = track?.getSettings?.() ?? {};
 
-      // 🔥 UI STATE GLOBAL (BORDER GREEN + FOCUS)
+      if (looksLikeCurrentConferenceSurface(track, settings)) {
+        stopStream(screen);
+        isSharingRef.current = false;
+        setScreenShareError("Vous avez choisi l'onglet de la visioconférence. Choisissez plutôt une fenêtre d'application ou un écran entier.");
+        return;
+      }
+
+      setScreenStream(screen);
+      setScreenShareMeta({
+        label: track?.label || 'Votre écran',
+        displaySurface: settings.displaySurface || options.displaySurface || 'monitor',
+        options,
+        startedAt: Date.now(),
+      });
       setScreenSharingId(socket.id);
 
       socket?.emit(EVENTS.SCREEN_START, { roomId });
 
-      const videoTrack = screen.getVideoTracks()[0];
+      replaceVideoTrackForAllPeers(track);
 
-      peerConnections.current.forEach(pc => {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) sender.replaceTrack(videoTrack);
-      });
+      track.onended = () => {
+        isSharingRef.current = false;
+        stopScreenShare();
+      };
 
-      videoTrack.onended = () => stopScreenShare();
     } catch (e) {
-      console.warn('Screen share cancelled:', e.message);
+      isSharingRef.current = false;
+      console.warn('Screen cancelled:', e.message);
     }
-  }, [socket, roomId, setScreenSharingId]);
+  }, [socket, roomId, replaceVideoTrackForAllPeers, setScreenSharingId]);
 
   const stopScreenShare = useCallback(() => {
     if (!screenStream) return;
 
+    isSharingRef.current = false;
+
     screenStream.getTracks().forEach(t => t.stop());
     setScreenStream(null);
+    setScreenShareMeta(null);
 
-    // 🔥 RESET UI STATE
     setScreenSharingId(null);
 
     socket?.emit(EVENTS.SCREEN_STOP, { roomId });
 
     const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
+    replaceVideoTrackForAllPeers(cameraTrack);
 
-    peerConnections.current.forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (sender && cameraTrack) sender.replaceTrack(cameraTrack);
-    });
-  }, [screenStream, socket, roomId, setScreenSharingId]);
-
+  }, [screenStream, socket, roomId, replaceVideoTrackForAllPeers, setScreenSharingId]);
   // ─────────────────────────────────────────────
   // RECORDING
   // ─────────────────────────────────────────────
@@ -240,21 +304,23 @@ export function MediaProvider({ children, initialStream = null }) {
   // LEAVE ROOM
   // ─────────────────────────────────────────────
   const leaveRoom = useCallback(() => {
-    localStreamRef.current?.getTracks().forEach(t => t.stop());
-    screenStream?.getTracks().forEach(t => t.stop());
+    stopStream(localStreamRef.current);
+    stopStream(screenStream);
 
     peerConnections.current.forEach(pc => pc.close());
     peerConnections.current.clear();
 
-    if (cleanupAudio.current) cleanupAudio.current();
+    cleanupAudio.current?.();
 
     setLocalStream(null);
     setScreenStream(null);
+    setScreenShareMeta(null);
+    setVirtualBackgroundStream(null);
     setRemoteStreams(new Map());
   }, [screenStream]);
 
   // ─────────────────────────────────────────────
-  // WEBRTC EVENTS (UNCHANGED)
+  // WEBRTC EVENTS
   // ─────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
@@ -333,10 +399,16 @@ export function MediaProvider({ children, initialStream = null }) {
   return (
       <MediaContext.Provider value={{
         localStream,
+        displayLocalStream: virtualBackgroundStream || localStream,
         remoteStreams,
         audioEnabled,
         videoEnabled,
         screenStream,
+        screenShareMeta,
+        screenShareError,
+        clearScreenShareError: () => setScreenShareError(''),
+        setVirtualBackgroundStream,
+        isSharing: Boolean(screenStream),
         isRecording,
         peerConnections,
         getMedia,

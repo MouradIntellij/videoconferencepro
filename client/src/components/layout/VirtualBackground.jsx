@@ -17,7 +17,6 @@
  */
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { useVirtualBackground } from '../../hooks/useVirtualBackground.js';
 
 // ─── Images prédéfinies ───────────────────────────────────────
 // URLs libres de droits depuis Unsplash (CDN autorisé via fetch)
@@ -200,13 +199,13 @@ function BgThumb({ bg, selected, onClick, loading }) {
 }
 
 // ─── Composant principal ──────────────────────────────────────
-export default function VirtualBackground({ localStream, peerConnections, onClose }) {
+export default function VirtualBackground({ controller, onClose }) {
     const {
         mode, active, loading, error,
         blurAmount,
         applyBlur, applyImage, applyColor, removeBackground,
         getOutputStream,
-    } = useVirtualBackground(localStream, peerConnections);
+    } = controller;
 
     const [tab,          setTab]          = useState('blur');  // 'blur'|'image'|'color'
     const [selectedId,   setSelectedId]   = useState(null);

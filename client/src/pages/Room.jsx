@@ -193,7 +193,7 @@ function InviteBanner({ roomId, onDismiss }) {
 export default function Room({ roomId, userName, onLeave }) {
   const { socket, connected }       = useSocket();
   const { participants, hostId }    = useRoom();
-  const { screenStream, leaveRoom } = useMedia();
+  const { screenStream, leaveRoom, screenShareError, clearScreenShareError } = useMedia();
   const { layout, toggleLayout }    = useUI();
 
   const { joinRoom, toggleHand } = useWebRTC(roomId, userName);
@@ -298,35 +298,59 @@ export default function Room({ roomId, userName, onLeave }) {
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden', fontFamily: 'system-ui, sans-serif',
         position: 'relative',
+        backgroundImage: 'radial-gradient(circle at top, rgba(37,99,235,0.14), transparent 30%), radial-gradient(circle at bottom right, rgba(34,197,94,0.12), transparent 28%)',
       }}>
 
         {/* ── HEADER (Teams-style) ── */}
         <div style={{
-          height: 44,
-          background: '#111827',
-          borderBottom: '1px solid rgba(255,255,255,0.07)',
-          padding: '0 16px',
+          minHeight: 56,
+          background: 'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(2,6,23,0.88) 100%)',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          padding: '8px 18px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           flexShrink: 0,
           zIndex: 30,
+          backdropFilter: 'blur(16px)',
+          boxShadow: '0 10px 30px rgba(2,6,23,0.28)',
         }}>
           {/* Left: branding + room info */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 34,
+                height: 34,
+                borderRadius: 12,
+                background: 'linear-gradient(135deg, rgba(37,99,235,0.28), rgba(16,185,129,0.18))',
+                border: '1px solid rgba(96,165,250,0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 10px 24px rgba(37,99,235,0.18)',
+              }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#93c5fd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
                 <polygon points="23 7 16 12 23 17 23 7"/>
                 <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
               </svg>
-              <span style={{ color: '#f1f5f9', fontWeight: 700, fontSize: 14 }}>
-              VideoConf
-            </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ color: '#f8fafc', fontWeight: 700, fontSize: 14, letterSpacing: '0.02em' }}>
+                  VideoConf
+                </span>
+                <span style={{ color: 'rgba(148,163,184,0.82)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', fontWeight: 700 }}>
+                  Session live
+                </span>
+              </div>
             </div>
 
-            <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.12)' }} />
+            <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.12)' }} />
 
             <span style={{
-              color: 'rgba(255,255,255,0.35)', fontSize: 11,
+              color: 'rgba(255,255,255,0.45)', fontSize: 11,
               fontFamily: 'monospace',
+              padding: '6px 10px',
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.06)',
             }}>
             {roomId.slice(0, 8).toUpperCase()}…
           </span>
@@ -334,8 +358,8 @@ export default function Room({ roomId, userName, onLeave }) {
             {/* Participant count */}
             <div style={{
               background: 'rgba(59,130,246,0.15)',
-              border: '1px solid rgba(59,130,246,0.25)',
-              borderRadius: 10, padding: '2px 8px',
+              border: '1px solid rgba(59,130,246,0.22)',
+              borderRadius: 999, padding: '5px 10px',
               fontSize: 11, color: '#93c5fd', fontWeight: 600,
               display: 'flex', alignItems: 'center', gap: 4,
             }}>
@@ -353,9 +377,10 @@ export default function Room({ roomId, userName, onLeave }) {
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 5,
                   background: 'rgba(34,197,94,0.12)',
-                  border: '1px solid rgba(34,197,94,0.3)',
-                  borderRadius: 10, padding: '2px 8px',
+                  border: '1px solid rgba(34,197,94,0.24)',
+                  borderRadius: 999, padding: '5px 10px',
                   fontSize: 11, color: '#4ade80', fontWeight: 600,
+                  boxShadow: '0 10px 26px rgba(34,197,94,0.12)',
                 }}>
               <span style={{
                 width: 5, height: 5, borderRadius: '50%',
@@ -368,7 +393,7 @@ export default function Room({ roomId, userName, onLeave }) {
           </div>
 
           {/* Center: layout toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 4, borderRadius: 999, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
             {[
               { id: 'grid', label: '⊞', title: 'Grille' },
               { id: 'spotlight', label: '📌', title: 'Vedette' },
@@ -378,11 +403,12 @@ export default function Room({ roomId, userName, onLeave }) {
                     onClick={() => id !== layout && toggleLayout()}
                     title={title}
                     style={{
-                      padding: '4px 10px', borderRadius: 6, border: 'none',
-                      background: layout === id ? 'rgba(59,130,246,0.25)' : 'rgba(255,255,255,0.05)',
-                      color: layout === id ? '#60a5fa' : 'rgba(255,255,255,0.45)',
+                      padding: '6px 12px', borderRadius: 999, border: 'none',
+                      background: layout === id ? 'rgba(59,130,246,0.22)' : 'transparent',
+                      color: layout === id ? '#bfdbfe' : 'rgba(255,255,255,0.45)',
                       fontSize: 13, cursor: 'pointer', transition: 'all 0.15s',
                       fontFamily: 'inherit',
+                      fontWeight: 700,
                     }}
                 >
                   {label}
@@ -401,7 +427,7 @@ export default function Room({ roomId, userName, onLeave }) {
                     onClick={() => setShowHands(v => !v)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 4,
-                      padding: '3px 10px', borderRadius: 8, border: 'none',
+                      padding: '5px 10px', borderRadius: 999, border: '1px solid rgba(245,158,11,0.14)',
                       background: showHands ? 'rgba(245,158,11,0.25)' : 'rgba(245,158,11,0.12)',
                       color: '#f59e0b', fontSize: 12, fontWeight: 600,
                       cursor: 'pointer', fontFamily: 'inherit',
@@ -420,9 +446,9 @@ export default function Room({ roomId, userName, onLeave }) {
                 onClick={() => setShowInvite(v => !v)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '4px 10px', borderRadius: 8, border: 'none',
-                  background: showInvite ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.06)',
-                  color: showInvite ? '#60a5fa' : 'rgba(255,255,255,0.5)',
+                  padding: '6px 12px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.08)',
+                  background: showInvite ? 'rgba(59,130,246,0.18)' : 'rgba(255,255,255,0.04)',
+                  color: showInvite ? '#bfdbfe' : 'rgba(255,255,255,0.58)',
                   fontSize: 11, fontWeight: 600, cursor: 'pointer',
                   fontFamily: 'inherit', transition: 'all 0.15s',
                 }}
@@ -439,6 +465,40 @@ export default function Room({ roomId, userName, onLeave }) {
         {/* ── INVITE BANNER ── */}
         {showInvite && (
             <InviteBanner roomId={roomId} onDismiss={() => setShowInvite(false)} />
+        )}
+
+        {screenShareError && (
+            <div style={{
+              margin: '10px 16px 0',
+              borderRadius: 14,
+              border: '1px solid rgba(248,113,113,0.22)',
+              background: 'rgba(127,29,29,0.22)',
+              color: '#fee2e2',
+              padding: '10px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              fontSize: 13,
+              boxShadow: '0 12px 30px rgba(2,6,23,0.18)',
+            }}>
+              <span>{screenShareError}</span>
+              <button
+                  onClick={clearScreenShareError}
+                  style={{
+                    border: 'none',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: '#fff',
+                    borderRadius: 999,
+                    width: 28,
+                    height: 28,
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+              >
+                ×
+              </button>
+            </div>
         )}
 
         {/* ── RAISED HANDS FLOATING PANEL ── */}

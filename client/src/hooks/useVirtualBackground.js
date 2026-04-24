@@ -21,12 +21,45 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 // ── Chargement paresseux de TensorFlow + BodyPix ─────────────
 // On ne charge ces libs lourdes (~8 MB) que si l'user active la feature
 let bodyPixPromise = null;
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${src}"]`);
+        if (existing) {
+            if (existing.dataset.loaded === 'true') {
+                resolve();
+                return;
+            }
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = () => {
+            script.dataset.loaded = 'true';
+            resolve();
+        };
+        script.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.head.appendChild(script);
+    });
+}
+
 async function loadBodyPix() {
     if (bodyPixPromise) return bodyPixPromise;
     bodyPixPromise = (async () => {
-        // TensorFlow.js WebGL backend
-        await import('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js');
-        await import('https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0/dist/body-pix.min.js');
+        if (!window.tf) {
+            await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js');
+        }
+        if (!window.bodyPix) {
+            await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0/dist/body-pix.min.js');
+        }
+
+        if (!window.bodyPix?.load) {
+            throw new Error('BodyPix unavailable after script load');
+        }
+
         const net = await window.bodyPix.load({
             architecture:       'MobileNetV1',
             outputStride:       16,
@@ -43,7 +76,7 @@ const FPS          = 24;
 const FRAME_MS     = 1000 / FPS;
 const SEG_INTERVAL = 3;   // segmenter 1 frame sur N pour les perfs
 
-export function useVirtualBackground(localStream, peerConnections) {
+export function useVirtualBackground(localStream, peerConnections, onOutputStreamChange) {
     const [mode,        setMode]        = useState('none');   // 'none'|'blur'|'image'|'color'
     const [blurAmount,  setBlurAmount]  = useState(12);
     const [bgImage,     setBgImage]     = useState(null);     // HTMLImageElement | null
@@ -86,6 +119,14 @@ export function useVirtualBackground(localStream, peerConnections) {
         hiddenVideoRef.current.srcObject = localStream;
         hiddenVideoRef.current.play().catch(() => {});
     }, [localStream]);
+
+    useEffect(() => {
+        if (active && outputStreamRef.current) {
+            onOutputStreamChange?.(outputStreamRef.current);
+            return;
+        }
+        onOutputStreamChange?.(localStream);
+    }, [active, localStream, onOutputStreamChange]);
 
     // ── Boucle de rendu ───────────────────────────────────────
     const renderLoop = useCallback(async () => {
@@ -222,6 +263,7 @@ export function useVirtualBackground(localStream, peerConnections) {
         setMode('none');
         segmentRef.current = null;
         frameCountRef.current = 0;
+        onOutputStreamChange?.(localStream);
     }, [peerConnections]);
 
     // Redémarrer la boucle quand renderLoop change (mode/blur/image/color)

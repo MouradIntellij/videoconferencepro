@@ -10,7 +10,7 @@ export function useWebRTC(roomId, userName) {
   const {
     setHostId, setLocked, setParticipants,
     addParticipant, removeParticipant, updateParticipant,
-    setBreakoutRooms, setCurrentBreakout,
+    setBreakoutRooms, setCurrentBreakout, setScreenSharingId, screenSharingId,
   } = useRoom();
   const { setActiveSpeakerId } = useUI();
   const { getMedia } = useMedia();
@@ -78,6 +78,8 @@ export function useWebRTC(roomId, userName) {
       updateParticipant(userId, { videoEnabled: enabled }));
     socket.on(EVENTS.AUDIO_TOGGLED, ({ userId, enabled }) =>
       updateParticipant(userId, { audioEnabled: enabled }));
+    socket.on(EVENTS.SCREEN_START, ({ userId }) => setScreenSharingId(userId));
+    socket.on(EVENTS.SCREEN_STOP, () => setScreenSharingId(null));
 
     // Active speaker
     const speakerMap = new Map();
@@ -101,6 +103,11 @@ export function useWebRTC(roomId, userName) {
     socket.on(EVENTS.BREAKOUT_ASSIGNED, ({ breakoutId, breakoutName }) =>
       setCurrentBreakout({ id: breakoutId, name: breakoutName }));
     socket.on(EVENTS.BREAKOUT_END_ALL, () => setCurrentBreakout(null));
+    socket.on(EVENTS.USER_LEFT, ({ socketId }) => {
+      if (socketId === screenSharingId) {
+        setScreenSharingId(null);
+      }
+    });
 
     return () => {
       socket.off(EVENTS.ROOM_PARTICIPANTS);
@@ -109,15 +116,18 @@ export function useWebRTC(roomId, userName) {
       socket.off(EVENTS.ROOM_LOCKED);
       socket.off(EVENTS.VIDEO_TOGGLED);
       socket.off(EVENTS.AUDIO_TOGGLED);
+      socket.off(EVENTS.SCREEN_START);
+      socket.off(EVENTS.SCREEN_STOP);
       socket.off(EVENTS.AUDIO_LEVEL);
       socket.off(EVENTS.HAND_RAISED);
       socket.off(EVENTS.HAND_LOWERED);
       socket.off(EVENTS.BREAKOUT_UPDATED);
       socket.off(EVENTS.BREAKOUT_ASSIGNED);
       socket.off(EVENTS.BREAKOUT_END_ALL);
+      socket.off(EVENTS.USER_LEFT);
     };
   }, [socket, setHostId, setLocked, setParticipants, addParticipant,
-    updateParticipant, setBreakoutRooms, setCurrentBreakout, setActiveSpeakerId]);
+    updateParticipant, setBreakoutRooms, setCurrentBreakout, setActiveSpeakerId, setScreenSharingId, screenSharingId]);
 
   return { joinRoom, toggleHand };
 }
